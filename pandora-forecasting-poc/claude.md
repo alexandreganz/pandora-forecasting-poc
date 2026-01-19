@@ -45,6 +45,11 @@ A Proof of Concept (PoC) Streamlit application designed for Pandora executives t
   - FTE Difference (positive = overstaffing, negative = understaffing)
   - Revenue Impact Analysis (kr per day and per week)
   - Dynamic reallocation benefits
+- **Hover Tooltip**: ⓘ icon with explanation on hover
+  - FTE calculation methodology
+  - Revenue impact formula details
+  - View mode-specific context (hourly vs daily)
+  - Dark tooltip with high contrast text
 - **Calculation Basis**:
   - Revenue from 5% conversion improvement
   - 20% baseline conversion × 931 kr average ticket
@@ -446,7 +451,8 @@ pip install -r requirements.txt --upgrade
   - **Model Accuracy Explanation**: Expandable info section in sidebar
   - **Scope Persistence**: Fixed bug where city filter reset on view mode change
   - **Removed Redundant Text**: Kept only interactive chart legend
-  - **Layout Optimization**: Perfect 2x2 grid alignment (60/40 split)
+  - **Layout Optimization**: Perfect 2x2 grid alignment (60/40 split with 3:2 ratio)
+  - **Hover Tooltip**: Added to Staffing Recommendation header with calculation details
   - **Code Cleanup**: Removed unused variables and optimized structure
 
 - **v2.0** (2026-01-19): Major update with behavioral tracking
