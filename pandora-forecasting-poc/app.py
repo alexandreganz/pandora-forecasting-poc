@@ -528,14 +528,17 @@ def calculate_forecast_accuracy(scope, stores_data, aggregate_data, selected_dat
     Returns accuracy for today, 3-day average, and weekly average
     """
     today = datetime.now().date()
+    view_mode = st.session_state.view_mode
 
-    # Helper function to calculate accuracy for a single date
-    def get_accuracy_for_date(date_obj, scope, stores_data):
+    # Helper function to calculate accuracy for a specific date
+    def get_accuracy_for_date(date_obj, scope, view_mode):
+        # Generate fresh data for this specific date
+        date_stores_data = generate_all_stores_data(date_obj, view_mode)
         accuracy_values = []
 
         if scope == "All Stores (Aggregate)":
             # Calculate across all stores
-            for store_name, df in stores_data.items():
+            for store_name, df in date_stores_data.items():
                 for _, row in df.iterrows():
                     if row['Actual_Traffic'] is not None and row['Actual_Traffic'] > 0:
                         predicted = row['Predicted_Traffic']
@@ -545,7 +548,7 @@ def calculate_forecast_accuracy(scope, stores_data, aggregate_data, selected_dat
                         accuracy_values.append(accuracy * 100)
         else:
             # Individual store
-            df = stores_data[scope]
+            df = date_stores_data[scope]
             for _, row in df.iterrows():
                 if row['Actual_Traffic'] is not None and row['Actual_Traffic'] > 0:
                     predicted = row['Predicted_Traffic']
@@ -555,22 +558,22 @@ def calculate_forecast_accuracy(scope, stores_data, aggregate_data, selected_dat
 
         return np.mean(accuracy_values) if accuracy_values else 95.0
 
-    # Calculate today's accuracy
-    accuracy_today = get_accuracy_for_date(today, scope, stores_data)
+    # Calculate today's accuracy (using actual today's date)
+    accuracy_today = get_accuracy_for_date(today, scope, view_mode)
 
-    # Calculate 3-day average
+    # Calculate 3-day average (today + 2 previous days)
     accuracy_3days_list = []
     for i in range(3):
         date_check = today - timedelta(days=i)
-        acc = get_accuracy_for_date(date_check, scope, stores_data)
+        acc = get_accuracy_for_date(date_check, scope, view_mode)
         accuracy_3days_list.append(acc)
     accuracy_3days = np.mean(accuracy_3days_list)
 
-    # Calculate weekly average
+    # Calculate weekly average (last 7 days)
     accuracy_week_list = []
     for i in range(7):
         date_check = today - timedelta(days=i)
-        acc = get_accuracy_for_date(date_check, scope, stores_data)
+        acc = get_accuracy_for_date(date_check, scope, view_mode)
         accuracy_week_list.append(acc)
     accuracy_week = np.mean(accuracy_week_list)
 
