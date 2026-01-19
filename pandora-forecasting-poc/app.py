@@ -644,6 +644,8 @@ if 'traffic_adjustments' not in st.session_state:
     }
 if 'view_mode' not in st.session_state:
     st.session_state.view_mode = 'hourly'
+if 'scope' not in st.session_state:
+    st.session_state.scope = "All Stores (Aggregate)"
 if 'implementation_history' not in st.session_state:
     # Generate mock historical implementation data per store (last 29 days, excluding today)
     import random
@@ -766,11 +768,15 @@ with st.sidebar:
 
     st.markdown("---")
 
-    # Scope Selector
+    # Scope Selector (with session state to persist across view mode changes)
     scope = st.selectbox(
         "📍 Scope Selector",
-        ["All Stores (Aggregate)", "London", "Copenhagen", "Paris"]
+        ["All Stores (Aggregate)", "London", "Copenhagen", "Paris"],
+        index=["All Stores (Aggregate)", "London", "Copenhagen", "Paris"].index(st.session_state.scope),
+        key="scope_selector"
     )
+    # Update session state when scope changes
+    st.session_state.scope = scope
 
     # Date Picker
     selected_date = st.date_input("📅 Forecast Date", value=today)
@@ -1070,23 +1076,20 @@ with col_left:
             hoverinfo='skip'
         ), secondary_y=False)
 
-        # 2. Baseline Staffing as Dashed Line (Right Y-axis)
-        fig.add_trace(go.Scatter(
+        # 2. Baseline Staffing as Grey Bars (Right Y-axis)
+        fig.add_trace(go.Bar(
             x=df[time_col],
             y=df['Baseline_FTE'],
             name='Baseline Staffing',
-            mode='lines',
-            line=dict(color='#999999', width=2, dash='dash'),
-            opacity=0.7
+            marker=dict(color='#D0D0D0', opacity=0.6)
         ), secondary_y=True)
 
-        # 3. AI Recommended Staffing as Solid Line (Right Y-axis)
-        fig.add_trace(go.Scatter(
+        # 3. AI Recommended Staffing as Green Bars (Right Y-axis)
+        fig.add_trace(go.Bar(
             x=df[time_col],
             y=df['AI_FTE'],
             name='AI Recommended Staffing',
-            mode='lines',
-            line=dict(color='#34C759', width=3)
+            marker=dict(color='#34C759', opacity=0.8)
         ), secondary_y=True)
 
         # 4. Predicted Traffic (Left Y-axis) - Main forecast line
@@ -1190,6 +1193,7 @@ with col_left:
                 borderwidth=1,
                 font=dict(size=12, color='#1A1A1A')
             ),
+            barmode='group',
             hovermode='x unified',
             height=450,
             margin=dict(l=60, r=80, t=60, b=60)
@@ -1214,8 +1218,8 @@ with col_left:
 
         with col_info2:
             st.caption("**👥 Staffing Levels**")
-            st.caption("• **Green line**: AI recommended (dynamic)")
-            st.caption("• **Grey dashed**: Baseline (flat)")
+            st.caption("• **Green bars**: AI recommended (dynamic)")
+            st.caption("• **Grey bars**: Baseline (flat)")
             if st.session_state.traffic_adjustments[scope]:
                 st.caption(f"• **⭐ {len(st.session_state.traffic_adjustments[scope])} manual adjustments** applied")
 
