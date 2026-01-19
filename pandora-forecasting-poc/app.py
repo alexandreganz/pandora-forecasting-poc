@@ -530,7 +530,13 @@ def calculate_forecast_accuracy(scope, stores_data, aggregate_data, selected_dat
     Uses current stores_data to calculate accuracy efficiently
     """
     today = datetime.now().date()
-    selected_date_obj = selected_date if isinstance(selected_date, date) else selected_date.date() if hasattr(selected_date, 'date') else selected_date
+
+    # Convert selected_date to date object if needed
+    # Check datetime first since it's a subclass of date
+    if hasattr(selected_date, 'date') and callable(selected_date.date):
+        selected_date_obj = selected_date.date()
+    else:
+        selected_date_obj = selected_date
 
     # Check if we have actual data (past dates only)
     has_actual_data = selected_date_obj <= today
