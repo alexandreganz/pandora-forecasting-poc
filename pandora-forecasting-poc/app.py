@@ -1201,28 +1201,6 @@ with col_left:
 
     st.plotly_chart(fig, width='stretch')
 
-    # Info messages for individual stores
-    if scope != "All Stores (Aggregate)":
-        # Show info about chart elements
-        df = stores_data[scope]
-        has_actual = df['Actual_Traffic'].notna().any()
-
-        col_info1, col_info2 = st.columns(2)
-
-        with col_info1:
-            st.caption("**📊 Traffic Forecast**")
-            st.caption("• **Pink line**: AI predicted traffic")
-            st.caption("• **Shaded area**: Confidence interval (±10%)")
-            if has_actual:
-                st.caption("• **Dark line**: Actual historical traffic")
-
-        with col_info2:
-            st.caption("**👥 Staffing Levels**")
-            st.caption("• **Green bars**: AI recommended (dynamic)")
-            st.caption("• **Grey bars**: Baseline (flat)")
-            if st.session_state.traffic_adjustments[scope]:
-                st.caption(f"• **⭐ {len(st.session_state.traffic_adjustments[scope])} manual adjustments** applied")
-
     # ============================================================================
     # IMPLEMENTATION TRACKING SECTION (moved to left column below chart)
     # ============================================================================
