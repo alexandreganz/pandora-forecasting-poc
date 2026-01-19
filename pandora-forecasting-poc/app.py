@@ -1064,7 +1064,23 @@ with col_left:
         # Create figure with secondary y-axis
         fig = make_subplots(specs=[[{"secondary_y": True}]])
 
-        # 1. Confidence Interval Band (filled area) - Add first (back layer)
+        # 1. Baseline Staffing as Grey Bars (Left Y-axis)
+        fig.add_trace(go.Bar(
+            x=df[time_col],
+            y=df['Baseline_FTE'],
+            name='Baseline Staffing',
+            marker=dict(color='#D0D0D0', opacity=0.6)
+        ), secondary_y=False)
+
+        # 2. AI Recommended Staffing as Green Bars (Left Y-axis)
+        fig.add_trace(go.Bar(
+            x=df[time_col],
+            y=df['AI_FTE'],
+            name='AI Recommended Staffing',
+            marker=dict(color='#34C759', opacity=0.8)
+        ), secondary_y=False)
+
+        # 3. Confidence Interval Band (filled area) - Add first (back layer on right axis)
         fig.add_trace(go.Scatter(
             x=df[time_col].tolist() + df[time_col].tolist()[::-1],
             y=df['Predicted_Upper'].tolist() + df['Predicted_Lower'].tolist()[::-1],
@@ -1074,25 +1090,9 @@ with col_left:
             name='Confidence Interval (±10%)',
             showlegend=True,
             hoverinfo='skip'
-        ), secondary_y=False)
-
-        # 2. Baseline Staffing as Grey Bars (Right Y-axis)
-        fig.add_trace(go.Bar(
-            x=df[time_col],
-            y=df['Baseline_FTE'],
-            name='Baseline Staffing',
-            marker=dict(color='#D0D0D0', opacity=0.6)
         ), secondary_y=True)
 
-        # 3. AI Recommended Staffing as Green Bars (Right Y-axis)
-        fig.add_trace(go.Bar(
-            x=df[time_col],
-            y=df['AI_FTE'],
-            name='AI Recommended Staffing',
-            marker=dict(color='#34C759', opacity=0.8)
-        ), secondary_y=True)
-
-        # 4. Predicted Traffic (Left Y-axis) - Main forecast line
+        # 4. Predicted Traffic (Right Y-axis) - Main forecast line
         fig.add_trace(go.Scatter(
             x=df[time_col],
             y=df['Predicted_Traffic'],
@@ -1100,9 +1100,9 @@ with col_left:
             mode='lines',
             line=dict(color='#F2B8C6', width=3),
             hovertemplate='<b>%{x}</b><br>Predicted: %{y:,.0f} visits<extra></extra>'
-        ), secondary_y=False)
+        ), secondary_y=True)
 
-        # 5. Actual Traffic (Left Y-axis) - Bold overlay showing reality
+        # 5. Actual Traffic (Right Y-axis) - Bold overlay showing reality
         # Filter to only show actual traffic where it exists (not None)
         actual_df = df[df['Actual_Traffic'].notna()].copy()
         if not actual_df.empty:
@@ -1114,7 +1114,7 @@ with col_left:
                 line=dict(color='#1A1A1A', width=3),
                 marker=dict(size=6, color='#1A1A1A', symbol='circle'),
                 hovertemplate='<b>%{x}</b><br>Actual: %{y:,.0f} visits<extra></extra>'
-            ), secondary_y=False)
+            ), secondary_y=True)
 
         # 6. Manual Adjustments - Orange markers for user-modified forecasts
         if st.session_state.traffic_adjustments[scope]:
@@ -1138,7 +1138,7 @@ with col_left:
                 ),
                 showlegend=True,
                 hovertemplate='<b>%{x}</b><br>Manually adjusted<extra></extra>'
-            ), secondary_y=False)
+            ), secondary_y=True)
 
         # Set axis titles and layer to render axes below traces
         fig.update_xaxes(
@@ -1154,7 +1154,7 @@ with col_left:
         )
 
         fig.update_yaxes(
-            title_text='Customer Traffic',
+            title_text='Staffing (FTE)',
             title_font=dict(size=14, color='#1A1A1A', family='Inter'),
             showgrid=True,
             gridcolor='#F0F0F0',
@@ -1167,7 +1167,7 @@ with col_left:
         )
 
         fig.update_yaxes(
-            title_text='Staffing (FTE)',
+            title_text='Customer Traffic',
             title_font=dict(size=14, color='#1A1A1A', family='Inter'),
             showgrid=False,
             showline=True,
