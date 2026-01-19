@@ -529,6 +529,16 @@ def calculate_forecast_accuracy(scope, stores_data, aggregate_data, selected_dat
 
     Uses current stores_data to calculate accuracy efficiently
     """
+    today = datetime.now().date()
+    selected_date_obj = selected_date if isinstance(selected_date, date) else selected_date.date() if hasattr(selected_date, 'date') else selected_date
+
+    # Check if we have actual data (past dates only)
+    has_actual_data = selected_date_obj <= today
+
+    if not has_actual_data:
+        # Future dates - no actual data, return N/A or default values
+        return 0.0, 0.0, 0.0
+
     # Calculate accuracy from current data (has actual traffic where available)
     accuracy_values = []
 
@@ -555,9 +565,13 @@ def calculate_forecast_accuracy(scope, stores_data, aggregate_data, selected_dat
     # Base accuracy from current data
     base_accuracy = np.mean(accuracy_values) if accuracy_values else 92.0
 
+    # Create a unique seed based on selected_date AND scope
+    # This ensures different dates and different stores have different accuracy values
+    seed_value = selected_date_obj.toordinal() + hash(scope) % 1000
+    np.random.seed(seed_value)
+
     # Add slight variations for different time periods
     # Today: Base accuracy with small random variance
-    np.random.seed(datetime.now().date().toordinal())
     accuracy_today = base_accuracy + np.random.uniform(-0.5, 0.5)
 
     # 3 Days: Slightly smoother (less variance)
@@ -1591,21 +1605,26 @@ with col_right:
     """, unsafe_allow_html=True)
 
     # Card 3: Forecast Accuracy (Compact)
+    # Format accuracy values - show "N/A" for future dates
+    today_display = "N/A" if accuracy_today == 0.0 else f"{accuracy_today:.1f}%"
+    days3_display = "N/A" if accuracy_3days == 0.0 else f"{accuracy_3days:.1f}%"
+    week_display = "N/A" if accuracy_week == 0.0 else f"{accuracy_week:.1f}%"
+
     st.markdown(f"""
     <div style="background: #FFFFFF; border: 1px solid #E8E8E8; border-radius: 8px; padding: 12px; margin-bottom: 10px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);">
         <div style="color: #1A1A1A; font-size: 12px; font-weight: 600; margin-bottom: 8px;">🎯 Forecast Accuracy</div>
         <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 8px;">
             <div style="text-align: center; padding: 8px; background: #FAFAFA; border-radius: 6px;">
                 <div style="color: #6B6B6B; font-size: 9px; font-weight: 600; text-transform: uppercase; margin-bottom: 3px;">Today</div>
-                <div style="color: #34C759; font-size: 18px; font-weight: 700; line-height: 1;">{accuracy_today:.1f}%</div>
+                <div style="color: #34C759; font-size: 18px; font-weight: 700; line-height: 1;">{today_display}</div>
             </div>
             <div style="text-align: center; padding: 8px; background: #FAFAFA; border-radius: 6px;">
                 <div style="color: #6B6B6B; font-size: 9px; font-weight: 600; text-transform: uppercase; margin-bottom: 3px;">3 Days</div>
-                <div style="color: #34C759; font-size: 18px; font-weight: 700; line-height: 1;">{accuracy_3days:.1f}%</div>
+                <div style="color: #34C759; font-size: 18px; font-weight: 700; line-height: 1;">{days3_display}</div>
             </div>
             <div style="text-align: center; padding: 8px; background: #FAFAFA; border-radius: 6px;">
                 <div style="color: #6B6B6B; font-size: 9px; font-weight: 600; text-transform: uppercase; margin-bottom: 3px;">Week</div>
-                <div style="color: #34C759; font-size: 18px; font-weight: 700; line-height: 1;">{accuracy_week:.1f}%</div>
+                <div style="color: #34C759; font-size: 18px; font-weight: 700; line-height: 1;">{week_display}</div>
             </div>
         </div>
         <div style="padding: 6px 8px; background: #F0FFF4; border-radius: 4px; border-left: 2px solid #34C759;">
