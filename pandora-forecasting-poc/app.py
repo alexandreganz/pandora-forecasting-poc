@@ -522,6 +522,60 @@ def calculate_kpis(scope, stores_data, aggregate_data):
 
     return total_traffic, revenue, efficiency
 
+def calculate_forecast_accuracy(scope, stores_data, aggregate_data, selected_date):
+    """
+    Calculate forecast accuracy by comparing actual vs predicted traffic
+    Returns accuracy for today, 3-day average, and weekly average
+    """
+    today = datetime.now().date()
+
+    # Helper function to calculate accuracy for a single date
+    def get_accuracy_for_date(date_obj, scope, stores_data):
+        accuracy_values = []
+
+        if scope == "All Stores (Aggregate)":
+            # Calculate across all stores
+            for store_name, df in stores_data.items():
+                for _, row in df.iterrows():
+                    if row['Actual_Traffic'] is not None and row['Actual_Traffic'] > 0:
+                        predicted = row['Predicted_Traffic']
+                        actual = row['Actual_Traffic']
+                        # Accuracy = 1 - (absolute error / predicted)
+                        accuracy = max(0, 1 - abs(predicted - actual) / predicted)
+                        accuracy_values.append(accuracy * 100)
+        else:
+            # Individual store
+            df = stores_data[scope]
+            for _, row in df.iterrows():
+                if row['Actual_Traffic'] is not None and row['Actual_Traffic'] > 0:
+                    predicted = row['Predicted_Traffic']
+                    actual = row['Actual_Traffic']
+                    accuracy = max(0, 1 - abs(predicted - actual) / predicted)
+                    accuracy_values.append(accuracy * 100)
+
+        return np.mean(accuracy_values) if accuracy_values else 95.0
+
+    # Calculate today's accuracy
+    accuracy_today = get_accuracy_for_date(today, scope, stores_data)
+
+    # Calculate 3-day average
+    accuracy_3days_list = []
+    for i in range(3):
+        date_check = today - timedelta(days=i)
+        acc = get_accuracy_for_date(date_check, scope, stores_data)
+        accuracy_3days_list.append(acc)
+    accuracy_3days = np.mean(accuracy_3days_list)
+
+    # Calculate weekly average
+    accuracy_week_list = []
+    for i in range(7):
+        date_check = today - timedelta(days=i)
+        acc = get_accuracy_for_date(date_check, scope, stores_data)
+        accuracy_week_list.append(acc)
+    accuracy_week = np.mean(accuracy_week_list)
+
+    return accuracy_today, accuracy_3days, accuracy_week
+
 def apply_traffic_adjustments(stores_data, adjustments_dict, view_mode='hourly'):
     """
     Apply manual traffic adjustments and recalculate AI staffing recommendations
@@ -1482,17 +1536,10 @@ with col_right:
     data_3days = 99.8
     data_week = 99.4
 
-    # Business Gain - Sales Opportunity (in kr)
-    if scope != "All Stores (Aggregate)":
-        # Individual store
-        gain_today = 8450
-        gain_3days = 24600
-        gain_week = 56800
-    else:
-        # Aggregate across all stores
-        gain_today = 25350
-        gain_3days = 73800
-        gain_week = 170400
+    # Forecast Accuracy (Actual vs Predicted)
+    accuracy_today, accuracy_3days, accuracy_week = calculate_forecast_accuracy(
+        scope, stores_data, aggregate_data, selected_date
+    )
 
     # Card 1: AI Adoption Rate (Compact)
     st.markdown(f"""
@@ -1546,30 +1593,27 @@ with col_right:
     </div>
     """, unsafe_allow_html=True)
 
-    # Card 3: Sales Opportunity (Compact)
+    # Card 3: Forecast Accuracy (Compact)
     st.markdown(f"""
     <div style="background: #FFFFFF; border: 1px solid #E8E8E8; border-radius: 8px; padding: 12px; margin-bottom: 10px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);">
-        <div style="color: #1A1A1A; font-size: 12px; font-weight: 600; margin-bottom: 8px;">💰 Sales Opportunity</div>
+        <div style="color: #1A1A1A; font-size: 12px; font-weight: 600; margin-bottom: 8px;">🎯 Forecast Accuracy</div>
         <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 8px;">
             <div style="text-align: center; padding: 8px; background: #FAFAFA; border-radius: 6px;">
                 <div style="color: #6B6B6B; font-size: 9px; font-weight: 600; text-transform: uppercase; margin-bottom: 3px;">Today</div>
-                <div style="color: #F2B8C6; font-size: 16px; font-weight: 700; line-height: 1;">{gain_today:,}</div>
-                <div style="color: #999999; font-size: 8px; margin-top: 2px;">kr</div>
+                <div style="color: #34C759; font-size: 18px; font-weight: 700; line-height: 1;">{accuracy_today:.1f}%</div>
             </div>
             <div style="text-align: center; padding: 8px; background: #FAFAFA; border-radius: 6px;">
                 <div style="color: #6B6B6B; font-size: 9px; font-weight: 600; text-transform: uppercase; margin-bottom: 3px;">3 Days</div>
-                <div style="color: #F2B8C6; font-size: 16px; font-weight: 700; line-height: 1;">{gain_3days:,}</div>
-                <div style="color: #999999; font-size: 8px; margin-top: 2px;">kr</div>
+                <div style="color: #34C759; font-size: 18px; font-weight: 700; line-height: 1;">{accuracy_3days:.1f}%</div>
             </div>
             <div style="text-align: center; padding: 8px; background: #FAFAFA; border-radius: 6px;">
                 <div style="color: #6B6B6B; font-size: 9px; font-weight: 600; text-transform: uppercase; margin-bottom: 3px;">Week</div>
-                <div style="color: #F2B8C6; font-size: 16px; font-weight: 700; line-height: 1;">{gain_week:,}</div>
-                <div style="color: #999999; font-size: 8px; margin-top: 2px;">kr</div>
+                <div style="color: #34C759; font-size: 18px; font-weight: 700; line-height: 1;">{accuracy_week:.1f}%</div>
             </div>
         </div>
-        <div style="padding: 6px 8px; background: #FFF5F7; border-radius: 4px; border-left: 2px solid #F2B8C6;">
+        <div style="padding: 6px 8px; background: #F0FFF4; border-radius: 4px; border-left: 2px solid #34C759;">
             <div style="color: #4A4A4A; font-size: 9px; line-height: 1.4;">
-                Revenue gain from AI optimization
+                Predicted vs Realized traffic accuracy
             </div>
         </div>
     </div>
