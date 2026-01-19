@@ -1051,26 +1051,55 @@ with col_left:
         df['Baseline_FTE'] = df['Baseline_Staffing'] / 50
         df['AI_FTE'] = df['AI_Recommended_Staffing'] / 50
 
+        # Calculate confidence intervals for predicted traffic (±10% typical for retail forecasting)
+        df['Predicted_Upper'] = df['Predicted_Traffic'] * 1.10
+        df['Predicted_Lower'] = df['Predicted_Traffic'] * 0.90
+
         # Create figure with secondary y-axis
         fig = make_subplots(specs=[[{"secondary_y": True}]])
 
-        # Baseline Staffing as Grey Bars (Right Y-axis) - Add first (back layer)
-        fig.add_trace(go.Bar(
+        # 1. Confidence Interval Band (filled area) - Add first (back layer)
+        fig.add_trace(go.Scatter(
+            x=df[time_col].tolist() + df[time_col].tolist()[::-1],
+            y=df['Predicted_Upper'].tolist() + df['Predicted_Lower'].tolist()[::-1],
+            fill='toself',
+            fillcolor='rgba(242, 184, 198, 0.15)',
+            line=dict(color='rgba(255,255,255,0)'),
+            name='Confidence Interval (±10%)',
+            showlegend=True,
+            hoverinfo='skip'
+        ), secondary_y=False)
+
+        # 2. Baseline Staffing as Dashed Line (Right Y-axis)
+        fig.add_trace(go.Scatter(
             x=df[time_col],
             y=df['Baseline_FTE'],
-            name='Baseline Staffing (Legacy)',
-            marker=dict(color='#D0D0D0', opacity=0.6)
+            name='Baseline Staffing',
+            mode='lines',
+            line=dict(color='#999999', width=2, dash='dash'),
+            opacity=0.7
         ), secondary_y=True)
 
-        # AI Recommended Staffing as Green Bars (Right Y-axis) - Add second
-        fig.add_trace(go.Bar(
+        # 3. AI Recommended Staffing as Solid Line (Right Y-axis)
+        fig.add_trace(go.Scatter(
             x=df[time_col],
             y=df['AI_FTE'],
             name='AI Recommended Staffing',
-            marker=dict(color='#34C759', opacity=0.8)
+            mode='lines',
+            line=dict(color='#34C759', width=3)
         ), secondary_y=True)
 
-        # Actual Traffic (Left Y-axis) - Add third (show historical data up to today)
+        # 4. Predicted Traffic (Left Y-axis) - Main forecast line
+        fig.add_trace(go.Scatter(
+            x=df[time_col],
+            y=df['Predicted_Traffic'],
+            name='Predicted Traffic',
+            mode='lines',
+            line=dict(color='#F2B8C6', width=3),
+            hovertemplate='<b>%{x}</b><br>Predicted: %{y:,.0f} visits<extra></extra>'
+        ), secondary_y=False)
+
+        # 5. Actual Traffic (Left Y-axis) - Bold overlay showing reality
         # Filter to only show actual traffic where it exists (not None)
         actual_df = df[df['Actual_Traffic'].notna()].copy()
         if not actual_df.empty:
@@ -1079,11 +1108,12 @@ with col_left:
                 y=actual_df['Actual_Traffic'],
                 name='Actual Traffic',
                 mode='lines+markers',
-                line=dict(color='#2C2C2C', width=2, dash='solid'),
-                marker=dict(size=7, color='#2C2C2C', symbol='circle')
+                line=dict(color='#1A1A1A', width=3),
+                marker=dict(size=6, color='#1A1A1A', symbol='circle'),
+                hovertemplate='<b>%{x}</b><br>Actual: %{y:,.0f} visits<extra></extra>'
             ), secondary_y=False)
 
-        # Highlight manually adjusted points - Add fourth
+        # 6. Manual Adjustments - Orange markers for user-modified forecasts
         if st.session_state.traffic_adjustments[scope]:
             adjusted_times = []
             adjusted_values = []
@@ -1095,26 +1125,17 @@ with col_left:
             fig.add_trace(go.Scatter(
                 x=adjusted_times,
                 y=adjusted_values,
-                name='Manual Adjustments',
+                name='Adjusted',
                 mode='markers',
                 marker=dict(
-                    size=12,
+                    size=14,
                     color='#FF9500',
                     symbol='star',
-                    line=dict(color='#2C2C2C', width=2)
+                    line=dict(color='#FFFFFF', width=2)
                 ),
-                showlegend=True
+                showlegend=True,
+                hovertemplate='<b>%{x}</b><br>Manually adjusted<extra></extra>'
             ), secondary_y=False)
-
-        # Predicted Traffic (Left Y-axis) - Add LAST (front layer)
-        fig.add_trace(go.Scatter(
-            x=df[time_col],
-            y=df['Predicted_Traffic'],
-            name='Predicted Traffic',
-            mode='lines+markers',
-            line=dict(color='#F2B8C6', width=3),
-            marker=dict(size=8, color='#F2B8C6', line=dict(color='#FFFFFF', width=1))
-        ), secondary_y=False)
 
         # Set axis titles and layer to render axes below traces
         fig.update_xaxes(
@@ -1169,7 +1190,6 @@ with col_left:
                 borderwidth=1,
                 font=dict(size=12, color='#1A1A1A')
             ),
-            barmode='group',
             hovermode='x unified',
             height=450,
             margin=dict(l=60, r=80, t=60, b=60)
@@ -1179,15 +1199,25 @@ with col_left:
 
     # Info messages for individual stores
     if scope != "All Stores (Aggregate)":
-        # Show info about actual vs predicted traffic
+        # Show info about chart elements
         df = stores_data[scope]
         has_actual = df['Actual_Traffic'].notna().any()
-        if has_actual:
-            st.info("📊 **Actual Traffic** (dark line) shows real customer visits up to today. Compare with **Predicted Traffic** (pink line) to assess forecast accuracy.")
 
-        # Show info about manual adjustments
-        if st.session_state.traffic_adjustments[scope]:
-            st.info(f"⭐ **{len(st.session_state.traffic_adjustments[scope])} manual adjustment(s) applied** — Orange stars indicate adjusted predictions. AI staffing recommendations have been recalculated automatically.")
+        col_info1, col_info2 = st.columns(2)
+
+        with col_info1:
+            st.caption("**📊 Traffic Forecast**")
+            st.caption("• **Pink line**: AI predicted traffic")
+            st.caption("• **Shaded area**: Confidence interval (±10%)")
+            if has_actual:
+                st.caption("• **Dark line**: Actual historical traffic")
+
+        with col_info2:
+            st.caption("**👥 Staffing Levels**")
+            st.caption("• **Green line**: AI recommended (dynamic)")
+            st.caption("• **Grey dashed**: Baseline (flat)")
+            if st.session_state.traffic_adjustments[scope]:
+                st.caption(f"• **⭐ {len(st.session_state.traffic_adjustments[scope])} manual adjustments** applied")
 
     # ============================================================================
     # IMPLEMENTATION TRACKING SECTION (moved to left column below chart)
