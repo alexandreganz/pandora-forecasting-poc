@@ -969,8 +969,8 @@ with col3:
 # MAIN CONTENT GRID - 2 COLUMN LAYOUT
 # ============================================================================
 
-# Create 2-column layout for main content
-col_left, col_right = st.columns([1.2, 1], gap="large")
+# Create 2-column layout for main content (60/40 split for better alignment)
+col_left, col_right = st.columns([3, 2], gap="large")
 
 # ============================================================================
 # LEFT COLUMN: VISUALIZATION
