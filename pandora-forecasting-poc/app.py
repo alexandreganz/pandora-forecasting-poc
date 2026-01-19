@@ -244,6 +244,7 @@ st.markdown("""
 # DATA GENERATION FUNCTIONS
 # ============================================================================
 
+@st.cache_data
 def generate_store_hourly_data(store_name, date):
     """
     Generate hourly synthetic data for a specific store
@@ -319,6 +320,7 @@ def generate_store_hourly_data(store_name, date):
 
     return pd.DataFrame(data)
 
+@st.cache_data
 def generate_store_daily_data(store_name, date):
     """
     Generate daily synthetic data for a specific store (7 days)
@@ -399,6 +401,7 @@ def generate_store_daily_data(store_name, date):
 
     return pd.DataFrame(data)
 
+@st.cache_data
 def generate_all_stores_data(date, view_mode='hourly'):
     """Generate data for all stores"""
     stores = ["London", "Copenhagen", "Paris"]
@@ -412,6 +415,7 @@ def generate_all_stores_data(date, view_mode='hourly'):
 
     return stores_data
 
+@st.cache_data
 def calculate_aggregate_data(stores_data, view_mode='hourly'):
     """Calculate aggregate data across all stores"""
     # Determine the time column name based on view mode
@@ -673,6 +677,7 @@ if 'implementation_history' not in st.session_state:
 # HELPER FUNCTIONS FOR FEEDBACK
 # ============================================================================
 
+@st.cache_data
 def generate_implementation_calendar(store_name):
     """Generate a calendar heatmap of AI adoption for a specific store"""
     # Get last 30 days including today
@@ -702,6 +707,7 @@ def generate_implementation_calendar(store_name):
 
     return df_calendar
 
+@st.cache_data
 def get_store_adoption_summary():
     """Get AI adoption rate for all stores (for regional manager view)"""
     stores = ["London", "Copenhagen", "Paris"]
@@ -1442,9 +1448,6 @@ with col_right:
 
     # Calculate difference (runs for both individual and aggregate)
     fte_difference = baseline_fte - ai_fte
-
-    # Both views express FTE as "per day"
-    period_label = "Operating Day" if st.session_state.view_mode == 'hourly' else "Day (Weekly Average)"
 
     # Revenue impact calculation (per day or per week based on view)
     # The AI system optimally staffs to match traffic patterns, improving service quality
