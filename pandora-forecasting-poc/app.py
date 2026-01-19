@@ -1449,22 +1449,65 @@ with col_right:
         tooltip_text = "Average FTE/Day shows the average number of full-time employees needed per day, averaged across the 7-day week. Revenue impact calculated from 5% conversion improvement due to optimal staffing (20% baseline conversion × 931 kr average ticket)."
 
     st.markdown(f"""
-    <div style="background: #FFFFFF; padding: 12px 16px; border-radius: 8px; border-left: 3px solid #F2B8C6; margin-bottom: 12px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02); position: relative; cursor: help;" class="section-header-with-tooltip">
-        <div style="color: #1A1A1A; font-size: 13px; font-weight: 600; margin-bottom: 2px;">
-            🎯 Staffing Recommendation
-            <span style="display: inline-block; margin-left: 6px; color: #999999; font-size: 11px; font-weight: normal;">ⓘ</span>
-        </div>
-        <div class="section-tooltip" style="visibility: hidden; width: 320px; background-color: #2C2C2C; color: #FFFFFF; text-align: left; border-radius: 8px; padding: 12px 16px; position: absolute; z-index: 1000; top: 105%; left: 0; opacity: 0; transition: opacity 0.3s; font-size: 11px; line-height: 1.6; box-shadow: 0 4px 12px rgba(0,0,0,0.3);">
-            <strong style="color: #F2B8C6;">About this metric:</strong><br><br>
-            {tooltip_text}
-        </div>
-    </div>
     <style>
-        .section-header-with-tooltip:hover .section-tooltip {{
-            visibility: visible;
-            opacity: 1;
+        .recommendation-header {{
+            background: #FFFFFF;
+            padding: 12px 16px;
+            border-radius: 8px;
+            border-left: 3px solid #F2B8C6;
+            margin-bottom: 12px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+            position: relative;
+        }}
+        .recommendation-title {{
+            color: #1A1A1A;
+            font-size: 13px;
+            font-weight: 600;
+            margin-bottom: 2px;
+            position: relative;
+            display: inline-block;
+        }}
+        .info-icon {{
+            display: inline-block;
+            margin-left: 6px;
+            color: #999999;
+            font-size: 11px;
+            font-weight: normal;
+            cursor: help;
+            position: relative;
+        }}
+        .info-icon .tooltip-box {{
+            display: none;
+            position: absolute;
+            width: 320px;
+            background-color: #2C2C2C;
+            color: #FFFFFF;
+            text-align: left;
+            border-radius: 8px;
+            padding: 12px 16px;
+            z-index: 9999;
+            top: 25px;
+            left: -160px;
+            font-size: 11px;
+            line-height: 1.6;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+        }}
+        .info-icon:hover .tooltip-box {{
+            display: block;
         }}
     </style>
+    <div class="recommendation-header">
+        <div class="recommendation-title">
+            🎯 Staffing Recommendation
+            <span class="info-icon">
+                ⓘ
+                <div class="tooltip-box">
+                    <strong style="color: #F2B8C6;">About this metric:</strong><br><br>
+                    {tooltip_text}
+                </div>
+            </span>
+        </div>
+    </div>
     """, unsafe_allow_html=True)
 
     # ============================================================================
