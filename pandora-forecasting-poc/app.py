@@ -1406,9 +1406,10 @@ with col_right:
     """, unsafe_allow_html=True)
 
     # ============================================================================
-    # STAFFING RECOMMENDATION & REVENUE IMPACT (for individual stores only)
+    # STAFFING RECOMMENDATION & REVENUE IMPACT (all views)
     # ============================================================================
     if scope != "All Stores (Aggregate)":
+        # Individual store
         df = stores_data[scope].copy()
 
         # Calculate FTE from adjusted staffing values (1 FTE per 50 customer visits)
@@ -1421,6 +1422,23 @@ with col_right:
         baseline_fte = df['Baseline_FTE'].mean()
         ai_fte = df['AI_FTE'].mean()
         total_traffic = df['Predicted_Traffic'].sum()
+    else:
+        # Aggregate across all stores
+        baseline_fte_sum = 0
+        ai_fte_sum = 0
+        total_traffic = 0
+
+        for store_name, df in stores_data.items():
+            df = df.copy()
+            df['Baseline_FTE'] = df['Baseline_Staffing'] / 50
+            df['AI_FTE'] = df['AI_Recommended_Staffing'] / 50
+
+            baseline_fte_sum += df['Baseline_FTE'].mean()
+            ai_fte_sum += df['AI_FTE'].mean()
+            total_traffic += df['Predicted_Traffic'].sum()
+
+        baseline_fte = baseline_fte_sum
+        ai_fte = ai_fte_sum
 
         # Calculate difference
         fte_difference = baseline_fte - ai_fte
@@ -1503,15 +1521,11 @@ with col_right:
         </div>
         """, unsafe_allow_html=True)
 
-        # Add explanation note
-        if st.session_state.view_mode == 'hourly':
-            st.caption("Note: Average FTE/Day shows the average number of full-time employees needed during the operating day (9:00-21:00). Revenue impact calculated from 5% conversion improvement due to optimal staffing (20% baseline conversion × 931 kr average ticket).")
-        else:
-            st.caption("Note: Average FTE/Day shows the average number of full-time employees needed per day, averaged across the 7-day week. Revenue impact calculated from 5% conversion improvement due to optimal staffing (20% baseline conversion × 931 kr average ticket).")
-
+    # Add explanation note
+    if st.session_state.view_mode == 'hourly':
+        st.caption("Note: Average FTE/Day shows the average number of full-time employees needed during the operating day (9:00-21:00). Revenue impact calculated from 5% conversion improvement due to optimal staffing (20% baseline conversion × 931 kr average ticket).")
     else:
-        # For aggregate view, show a message
-        st.info("💡 Select an individual store to see staffing recommendations and financial impact analysis.")
+        st.caption("Note: Average FTE/Day shows the average number of full-time employees needed per day, averaged across the 7-day week. Revenue impact calculated from 5% conversion improvement due to optimal staffing (20% baseline conversion × 931 kr average ticket).")
 
     # ============================================================================
     # KPI OVERVIEW CARDS - COMPACT VERSION
