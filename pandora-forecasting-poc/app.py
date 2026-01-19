@@ -1440,58 +1440,58 @@ with col_right:
         baseline_fte = baseline_fte_sum
         ai_fte = ai_fte_sum
 
-        # Calculate difference
-        fte_difference = baseline_fte - ai_fte
+    # Calculate difference (runs for both individual and aggregate)
+    fte_difference = baseline_fte - ai_fte
 
-        # Both views express FTE as "per day"
-        period_label = "Operating Day" if st.session_state.view_mode == 'hourly' else "Day (Weekly Average)"
+    # Both views express FTE as "per day"
+    period_label = "Operating Day" if st.session_state.view_mode == 'hourly' else "Day (Weekly Average)"
 
-        # Revenue impact calculation (per day or per week based on view)
-        # The AI system optimally staffs to match traffic patterns, improving service quality
-        # Better staffing during peaks = better customer experience = higher conversion rates
-        conversion_rate = 0.20  # 20% baseline conversion
-        avg_ticket_dkk = 931.25  # $125 × 7.45 DKK/USD
+    # Revenue impact calculation (per day or per week based on view)
+    # The AI system optimally staffs to match traffic patterns, improving service quality
+    # Better staffing during peaks = better customer experience = higher conversion rates
+    conversion_rate = 0.20  # 20% baseline conversion
+    avg_ticket_dkk = 931.25  # $125 × 7.45 DKK/USD
 
-        # Calculate potential revenue from optimal staffing
-        # Optimal staffing improves conversion by ~5-8% through reduced wait times and better service
-        conversion_improvement = 0.05  # 5% improvement in conversion rate
-        revenue_impact = int(total_traffic * conversion_improvement * conversion_rate * avg_ticket_dkk)
+    # Calculate potential revenue from optimal staffing
+    # Optimal staffing improves conversion by ~5-8% through reduced wait times and better service
+    conversion_improvement = 0.05  # 5% improvement in conversion rate
+    revenue_impact = int(total_traffic * conversion_improvement * conversion_rate * avg_ticket_dkk)
 
-        # For hourly view, this is per day. For daily view, this is per week
+    # For hourly view, this is per day. For daily view, this is per week
+    if st.session_state.view_mode == 'hourly':
+        revenue_per_day = revenue_impact
+        revenue_weekly = None
+    else:
+        revenue_weekly = revenue_impact
+        revenue_per_day = revenue_impact // 7
+
+    # Create a styled recommendation box
+    if fte_difference > 0:
+        # Legacy system is overstaffed - but still show revenue opportunity from better allocation
+        recommendation_color = "#E8F5E9"  # Light green
+        recommendation_text = f"The AI system recommends an average of <strong>{ai_fte:.1f} FTE per day</strong> compared to the legacy system's <strong>{baseline_fte:.1f} FTE per day</strong> (a reduction of {abs(fte_difference):.1f} FTE). The legacy system maintains flat staffing levels, while AI dynamically allocates staff to peak periods."
         if st.session_state.view_mode == 'hourly':
-            revenue_per_day = revenue_impact
-            revenue_weekly = None
+            impact_text = f"By reallocating staff to match traffic patterns (more staff during peaks, fewer during slow periods), you can <strong>capture an estimated {revenue_per_day:,} kr per day</strong> in additional revenue through improved customer service during high-traffic hours."
         else:
-            revenue_weekly = revenue_impact
-            revenue_per_day = revenue_impact // 7
-
-        # Create a styled recommendation box
-        if fte_difference > 0:
-            # Legacy system is overstaffed - but still show revenue opportunity from better allocation
-            recommendation_color = "#E8F5E9"  # Light green
-            recommendation_text = f"The AI system recommends an average of <strong>{ai_fte:.1f} FTE per day</strong> compared to the legacy system's <strong>{baseline_fte:.1f} FTE per day</strong> (a reduction of {abs(fte_difference):.1f} FTE). The legacy system maintains flat staffing levels, while AI dynamically allocates staff to peak periods."
-            if st.session_state.view_mode == 'hourly':
-                impact_text = f"By reallocating staff to match traffic patterns (more staff during peaks, fewer during slow periods), you can <strong>capture an estimated {revenue_per_day:,} kr per day</strong> in additional revenue through improved customer service during high-traffic hours."
-            else:
-                impact_text = f"By reallocating staff to match traffic patterns (more staff during peaks, fewer during slow periods), you can <strong>capture an estimated {revenue_per_day:,} kr per day</strong> ({revenue_weekly:,} kr per week) in additional revenue through improved customer service during high-traffic hours."
-        elif fte_difference < 0:
-            # Legacy system is understaffed
-            recommendation_color = "#FFF3E0"  # Light orange
-            recommendation_text = f"The AI system recommends an average of <strong>{ai_fte:.1f} FTE per day</strong> compared to the legacy system's <strong>{baseline_fte:.1f} FTE per day</strong> (an increase of {abs(fte_difference):.1f} FTE). The legacy system under-allocates staff during peak traffic periods, leading to missed sales opportunities."
-            if st.session_state.view_mode == 'hourly':
-                impact_text = f"By adding staff during high-traffic periods, you can <strong>capture an estimated {revenue_per_day:,} kr per day</strong> in additional revenue from improved customer service and reduced wait times."
-            else:
-                impact_text = f"By adding staff during high-traffic periods, you can <strong>capture an estimated {revenue_per_day:,} kr per day</strong> ({revenue_weekly:,} kr per week) in additional revenue from improved customer service and reduced wait times."
+            impact_text = f"By reallocating staff to match traffic patterns (more staff during peaks, fewer during slow periods), you can <strong>capture an estimated {revenue_per_day:,} kr per day</strong> ({revenue_weekly:,} kr per week) in additional revenue through improved customer service during high-traffic hours."
+    elif fte_difference < 0:
+        # Legacy system is understaffed
+        recommendation_color = "#FFF3E0"  # Light orange
+        recommendation_text = f"The AI system recommends an average of <strong>{ai_fte:.1f} FTE per day</strong> compared to the legacy system's <strong>{baseline_fte:.1f} FTE per day</strong> (an increase of {abs(fte_difference):.1f} FTE). The legacy system under-allocates staff during peak traffic periods, leading to missed sales opportunities."
+        if st.session_state.view_mode == 'hourly':
+            impact_text = f"By adding staff during high-traffic periods, you can <strong>capture an estimated {revenue_per_day:,} kr per day</strong> in additional revenue from improved customer service and reduced wait times."
         else:
-            # Equal staffing
-            recommendation_color = "#E3F2FD"  # Light blue
-            recommendation_text = f"The AI system's average staffing recommendation ({ai_fte:.1f} FTE per day) closely matches the legacy system."
-            if st.session_state.view_mode == 'hourly':
-                impact_text = f"However, the AI system dynamically adjusts staffing to match traffic patterns throughout the day. This optimal allocation can still <strong>generate an estimated {revenue_per_day:,} kr per day</strong> through better peak coverage and improved customer experience."
-            else:
-                impact_text = f"However, the AI system dynamically adjusts staffing to match traffic patterns throughout the week. This optimal allocation can still <strong>generate an estimated {revenue_per_day:,} kr per day</strong> ({revenue_weekly:,} kr per week) through better peak coverage and improved customer experience."
+            impact_text = f"By adding staff during high-traffic periods, you can <strong>capture an estimated {revenue_per_day:,} kr per day</strong> ({revenue_weekly:,} kr per week) in additional revenue from improved customer service and reduced wait times."
+    else:
+        # Equal staffing
+        recommendation_color = "#E3F2FD"  # Light blue
+        recommendation_text = f"The AI system's average staffing recommendation ({ai_fte:.1f} FTE per day) closely matches the legacy system."
+        if st.session_state.view_mode == 'hourly':
+            impact_text = f"However, the AI system dynamically adjusts staffing to match traffic patterns throughout the day. This optimal allocation can still <strong>generate an estimated {revenue_per_day:,} kr per day</strong> through better peak coverage and improved customer experience."
+        else:
+            impact_text = f"However, the AI system dynamically adjusts staffing to match traffic patterns throughout the week. This optimal allocation can still <strong>generate an estimated {revenue_per_day:,} kr per day</strong> ({revenue_weekly:,} kr per week) through better peak coverage and improved customer experience."
 
-        st.markdown(f"""
+    st.markdown(f"""
         <div style="background: {recommendation_color}; border-radius: 12px; padding: 24px; margin-bottom: 20px; border-left: 4px solid #F2B8C6;">
             <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-bottom: 20px;">
                 <div style="text-align: center;">
