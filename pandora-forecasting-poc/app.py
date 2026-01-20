@@ -1823,6 +1823,49 @@ with col_right:
         scope, stores_data, aggregate_data, selected_date
     )
 
+    # Helper function to determine metric colors based on thresholds
+    def get_adoption_color(value):
+        """AI Adoption Rate: <60% red, 60-80% orange, >80% green"""
+        if value < 60:
+            return "#E74C3C"  # Red
+        elif value < 80:
+            return "#FF9500"  # Orange
+        else:
+            return "#34C759"  # Green
+
+    def get_data_quality_color(value):
+        """Data Quality: <95% red, 95-99.4% orange, >=99.5% green"""
+        if value < 95:
+            return "#E74C3C"  # Red
+        elif value < 99.5:
+            return "#FF9500"  # Orange
+        else:
+            return "#34C759"  # Green
+
+    def get_accuracy_color(value):
+        """Forecast Accuracy: <90% red, 90-93% orange, >93% green"""
+        if value == 0.0:  # N/A case
+            return "#999999"  # Grey
+        if value < 90:
+            return "#E74C3C"  # Red
+        elif value <= 93:
+            return "#FF9500"  # Orange
+        else:
+            return "#34C759"  # Green
+
+    # Get colors for each metric
+    adoption_color_today = get_adoption_color(adoption_today)
+    adoption_color_3days = get_adoption_color(adoption_3days)
+    adoption_color_week = get_adoption_color(adoption_week)
+
+    data_color_today = get_data_quality_color(data_today)
+    data_color_3days = get_data_quality_color(data_3days)
+    data_color_week = get_data_quality_color(data_week)
+
+    accuracy_color_today = get_accuracy_color(accuracy_today)
+    accuracy_color_3days = get_accuracy_color(accuracy_3days)
+    accuracy_color_week = get_accuracy_color(accuracy_week)
+
     # Card 1: AI Adoption Rate (Compact)
     st.markdown(f"""
     <div style="background: #FFFFFF; border: 1px solid #E8E8E8; border-radius: 8px; padding: 12px; margin-bottom: 10px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);">
@@ -1830,18 +1873,18 @@ with col_right:
         <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 8px;">
             <div style="text-align: center; padding: 8px; background: #FAFAFA; border-radius: 6px;">
                 <div style="color: #6B6B6B; font-size: 9px; font-weight: 600; text-transform: uppercase; margin-bottom: 3px;">Today</div>
-                <div style="color: #34C759; font-size: 18px; font-weight: 700; line-height: 1;">{adoption_today:.0f}%</div>
+                <div style="color: {adoption_color_today}; font-size: 18px; font-weight: 700; line-height: 1;">{adoption_today:.0f}%</div>
             </div>
             <div style="text-align: center; padding: 8px; background: #FAFAFA; border-radius: 6px;">
                 <div style="color: #6B6B6B; font-size: 9px; font-weight: 600; text-transform: uppercase; margin-bottom: 3px;">3 Days</div>
-                <div style="color: #34C759; font-size: 18px; font-weight: 700; line-height: 1;">{adoption_3days:.0f}%</div>
+                <div style="color: {adoption_color_3days}; font-size: 18px; font-weight: 700; line-height: 1;">{adoption_3days:.0f}%</div>
             </div>
             <div style="text-align: center; padding: 8px; background: #FAFAFA; border-radius: 6px;">
                 <div style="color: #6B6B6B; font-size: 9px; font-weight: 600; text-transform: uppercase; margin-bottom: 3px;">Week</div>
-                <div style="color: #34C759; font-size: 18px; font-weight: 700; line-height: 1;">{adoption_week:.0f}%</div>
+                <div style="color: {adoption_color_week}; font-size: 18px; font-weight: 700; line-height: 1;">{adoption_week:.0f}%</div>
             </div>
         </div>
-        <div style="padding: 6px 8px; background: #F0F9FF; border-radius: 4px; border-left: 2px solid #34C759;">
+        <div style="padding: 6px 8px; background: #F0F9FF; border-radius: 4px; border-left: 2px solid {adoption_color_week};">
             <div style="color: #4A4A4A; font-size: 9px; line-height: 1.4;">
                 % of days following AI recommendations
             </div>
@@ -1856,18 +1899,18 @@ with col_right:
         <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 8px;">
             <div style="text-align: center; padding: 8px; background: #FAFAFA; border-radius: 6px;">
                 <div style="color: #6B6B6B; font-size: 9px; font-weight: 600; text-transform: uppercase; margin-bottom: 3px;">Today</div>
-                <div style="color: #2ECC71; font-size: 18px; font-weight: 700; line-height: 1;">{data_today:.1f}%</div>
+                <div style="color: {data_color_today}; font-size: 18px; font-weight: 700; line-height: 1;">{data_today:.1f}%</div>
             </div>
             <div style="text-align: center; padding: 8px; background: #FAFAFA; border-radius: 6px;">
                 <div style="color: #6B6B6B; font-size: 9px; font-weight: 600; text-transform: uppercase; margin-bottom: 3px;">3 Days</div>
-                <div style="color: #2ECC71; font-size: 18px; font-weight: 700; line-height: 1;">{data_3days:.1f}%</div>
+                <div style="color: {data_color_3days}; font-size: 18px; font-weight: 700; line-height: 1;">{data_3days:.1f}%</div>
             </div>
             <div style="text-align: center; padding: 8px; background: #FAFAFA; border-radius: 6px;">
                 <div style="color: #6B6B6B; font-size: 9px; font-weight: 600; text-transform: uppercase; margin-bottom: 3px;">Week</div>
-                <div style="color: #2ECC71; font-size: 18px; font-weight: 700; line-height: 1;">{data_week:.1f}%</div>
+                <div style="color: {data_color_week}; font-size: 18px; font-weight: 700; line-height: 1;">{data_week:.1f}%</div>
             </div>
         </div>
-        <div style="padding: 6px 8px; background: #F0FFF4; border-radius: 4px; border-left: 2px solid #2ECC71;">
+        <div style="padding: 6px 8px; background: #F0FFF4; border-radius: 4px; border-left: 2px solid {data_color_week};">
             <div style="color: #4A4A4A; font-size: 9px; line-height: 1.4;">
                 Completeness & freshness of data feeds
             </div>
@@ -1887,18 +1930,18 @@ with col_right:
         <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 8px;">
             <div style="text-align: center; padding: 8px; background: #FAFAFA; border-radius: 6px;">
                 <div style="color: #6B6B6B; font-size: 9px; font-weight: 600; text-transform: uppercase; margin-bottom: 3px;">Today</div>
-                <div style="color: #34C759; font-size: 18px; font-weight: 700; line-height: 1;">{today_display}</div>
+                <div style="color: {accuracy_color_today}; font-size: 18px; font-weight: 700; line-height: 1;">{today_display}</div>
             </div>
             <div style="text-align: center; padding: 8px; background: #FAFAFA; border-radius: 6px;">
                 <div style="color: #6B6B6B; font-size: 9px; font-weight: 600; text-transform: uppercase; margin-bottom: 3px;">3 Days</div>
-                <div style="color: #34C759; font-size: 18px; font-weight: 700; line-height: 1;">{days3_display}</div>
+                <div style="color: {accuracy_color_3days}; font-size: 18px; font-weight: 700; line-height: 1;">{days3_display}</div>
             </div>
             <div style="text-align: center; padding: 8px; background: #FAFAFA; border-radius: 6px;">
                 <div style="color: #6B6B6B; font-size: 9px; font-weight: 600; text-transform: uppercase; margin-bottom: 3px;">Week</div>
-                <div style="color: #34C759; font-size: 18px; font-weight: 700; line-height: 1;">{week_display}</div>
+                <div style="color: {accuracy_color_week}; font-size: 18px; font-weight: 700; line-height: 1;">{week_display}</div>
             </div>
         </div>
-        <div style="padding: 6px 8px; background: #F0FFF4; border-radius: 4px; border-left: 2px solid #34C759;">
+        <div style="padding: 6px 8px; background: #F0FFF4; border-radius: 4px; border-left: 2px solid {accuracy_color_week};">
             <div style="color: #4A4A4A; font-size: 9px; line-height: 1.4;">
                 Predicted vs Realized traffic accuracy
             </div>
