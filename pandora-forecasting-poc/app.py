@@ -1472,68 +1472,71 @@ with col_left:
         weeks = sorted(df_calendar['Week'].unique())
         days_order = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
-        # Prepare data for heatmap
+        # Prepare data for heatmap - calculate cumulative adoption rate for each day
         heatmap_data = []
+        hover_text = []
+
+        # Sort calendar by date to calculate cumulative adoption
+        df_calendar_sorted = df_calendar.sort_values('Date')
+
         for week in weeks:
             week_data = []
+            week_hover = []
             for day in days_order:
                 mask = (df_calendar['Week'] == week) & (df_calendar['Day'] == day)
                 if mask.any():
-                    decision = df_calendar[mask]['Decision'].values[0]
-                    # 1 = AI (green), 0 = Legacy (grey), None = No decision (white)
-                    if decision == 1:
-                        week_data.append(100)  # AI recommendation
-                    elif decision == 0:
-                        week_data.append(50)   # Legacy system
+                    row = df_calendar[mask].iloc[0]
+                    current_date = row['Date']
+
+                    # Calculate adoption rate up to and including this day
+                    up_to_mask = df_calendar_sorted['Date'] <= current_date
+                    decisions_up_to = df_calendar_sorted[up_to_mask]['Decision'].values
+
+                    ai_count = sum(1 for d in decisions_up_to if d == 1)
+                    total_count = sum(1 for d in decisions_up_to if d is not None)
+
+                    if total_count > 0:
+                        adoption_rate = (ai_count / total_count) * 100
+                        week_data.append(adoption_rate)
+                        date_str = row['Date'].strftime('%b %d')
+                        week_hover.append(f"{date_str}<br>{adoption_rate:.0f}% AI Adoption<br>({ai_count}/{total_count} days)")
                     else:
-                        week_data.append(0)    # No decision yet
+                        week_data.append(None)  # No decision yet
+                        date_str = row['Date'].strftime('%b %d')
+                        week_hover.append(f"{date_str}<br>No decision yet")
                 else:
-                    week_data.append(0)
+                    week_data.append(None)
+                    week_hover.append("")
             heatmap_data.append(week_data)
+            hover_text.append(week_hover)
 
         # Transpose for correct orientation
         heatmap_data = list(map(list, zip(*heatmap_data)))
-
-        # Custom hover text
-        hover_text = []
-        for day_idx, day in enumerate(days_order):
-            day_hover = []
-            for week in weeks:
-                mask = (df_calendar['Week'] == week) & (df_calendar['Day'] == day)
-                if mask.any():
-                    row = df_calendar[mask].iloc[0]
-                    date_str = row['Date'].strftime('%b %d')
-                    if row['Decision'] == 1:
-                        day_hover.append(f"{date_str}<br>✓ Following AI")
-                    elif row['Decision'] == 0:
-                        day_hover.append(f"{date_str}<br>⊗ Using Legacy")
-                    else:
-                        day_hover.append(f"{date_str}<br>No decision")
-                else:
-                    day_hover.append("")
-            hover_text.append(day_hover)
+        hover_text = list(map(list, zip(*hover_text)))
 
         fig_calendar.add_trace(go.Heatmap(
             z=heatmap_data,
             x=[f'Week {w+1}' for w in weeks],
             y=days_order,
             colorscale=[
-                [0, '#F5F5F5'],      # Light grey (no decision)
-                [0.5, '#D0D0D0'],    # Grey (legacy system)
-                [1, '#34C759']       # Green (AI recommendation)
+                [0, '#E74C3C'],      # Red (0% - all legacy)
+                [0.6, '#FF9500'],    # Orange (60% - threshold)
+                [0.8, '#FFC107'],    # Yellow (80% - warning)
+                [1, '#34C759']       # Green (100% - all AI)
             ],
             text=hover_text,
             hovertemplate='%{text}<extra></extra>',
             showscale=True,
             colorbar=dict(
-                title="Decision",
-                tickvals=[25, 75],
-                ticktext=["Legacy", "AI"],
+                title="AI Adoption %",
+                tickvals=[0, 60, 80, 100],
+                ticktext=["0%", "60%", "80%", "100%"],
                 thickness=15,
                 len=0.7
             ),
             zmin=0,
-            zmax=100
+            zmax=100,
+            zmid=80  # Center the colorscale around 80% (target threshold)
         ))
 
         fig_calendar.update_layout(
