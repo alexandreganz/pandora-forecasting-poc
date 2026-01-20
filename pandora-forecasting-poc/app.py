@@ -482,10 +482,12 @@ def calculate_kpis(scope, stores_data, aggregate_data):
         # Calculate dynamic revenue with baseline staffing
         baseline_revenue_data = calculate_dynamic_revenue(total_traffic, total_baseline_staffing)
         baseline_revenue = baseline_revenue_data['revenue']
+        baseline_cr = baseline_revenue_data['conversion_rate']
 
         # Calculate dynamic revenue with AI staffing
         ai_revenue_data = calculate_dynamic_revenue(total_traffic, total_ai_staffing)
         ai_revenue = ai_revenue_data['revenue']
+        ai_cr = ai_revenue_data['conversion_rate']
 
         # Calculate lost revenue (positive = lost opportunity, negative = savings)
         lost_revenue = ai_revenue - baseline_revenue
@@ -493,48 +495,11 @@ def calculate_kpis(scope, stores_data, aggregate_data):
         # Return AI revenue as the primary metric
         revenue = ai_revenue
 
-        # Calculate efficiency across all stores
-        forecasted_fte = 0
-        realized_fte = 0
-
-        for store_name, df in stores_data.items():
-            store_history = st.session_state.implementation_history.get(store_name, {})
-
-            for idx, row in df.iterrows():
-                # Calculate the actual date for this row
-                if view_mode == 'hourly':
-                    # All hours are from selected_date
-                    row_date = selected_date
-                else:  # daily
-                    # Calculate which date this day represents
-                    # Get the Monday of the week containing selected_date
-                    selected_weekday = selected_date.weekday()  # 0=Monday, 6=Sunday
-                    week_start = selected_date - timedelta(days=selected_weekday)
-
-                    # Map day name to date
-                    day_names = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
-                    day_index = day_names.index(row['Day'])
-                    row_date = week_start + timedelta(days=day_index)
-
-                date_key = row_date.strftime('%Y-%m-%d')
-
-                # Forecasted FTE (AI recommendation based on predicted traffic at 4:1 optimal ratio)
-                forecasted_fte += row['Predicted_Traffic'] / 4
-
-                # Realized FTE based on implementation decision
-                decision = store_history.get(date_key, {}).get('decision', None)
-
-                if decision == 1:  # Following AI
-                    realized_fte += row['AI_Recommended_Staffing']
-                elif decision == 0:  # Using Legacy
-                    realized_fte += row['Baseline_Staffing']
-                else:  # No decision yet, assume AI
-                    realized_fte += row['AI_Recommended_Staffing']
-
-        efficiency = int((realized_fte / forecasted_fte * 100)) if forecasted_fte > 0 else 100
+        # Calculate conversion efficiency (improvement from baseline to AI)
+        conversion_improvement = ((ai_cr - baseline_cr) / baseline_cr * 100) if baseline_cr > 0 else 0
 
         # Store baseline and AI revenue for returning
-        return total_traffic, revenue, efficiency, baseline_revenue, ai_revenue, lost_revenue
+        return total_traffic, revenue, conversion_improvement, baseline_revenue, ai_revenue, lost_revenue, baseline_cr, ai_cr
     else:
         df = stores_data[scope]
         total_traffic = int(df['Predicted_Traffic'].sum())
@@ -546,10 +511,12 @@ def calculate_kpis(scope, stores_data, aggregate_data):
         # Calculate dynamic revenue with baseline staffing
         baseline_revenue_data = calculate_dynamic_revenue(total_traffic, total_baseline_staffing)
         baseline_revenue = baseline_revenue_data['revenue']
+        baseline_cr = baseline_revenue_data['conversion_rate']
 
         # Calculate dynamic revenue with AI staffing
         ai_revenue_data = calculate_dynamic_revenue(total_traffic, total_ai_staffing)
         ai_revenue = ai_revenue_data['revenue']
+        ai_cr = ai_revenue_data['conversion_rate']
 
         # Calculate lost revenue (positive = lost opportunity, negative = savings)
         lost_revenue = ai_revenue - baseline_revenue
@@ -557,46 +524,11 @@ def calculate_kpis(scope, stores_data, aggregate_data):
         # Return AI revenue as the primary metric
         revenue = ai_revenue
 
-        # Calculate efficiency for individual store
-        forecasted_fte = 0
-        realized_fte = 0
-
-        store_history = st.session_state.implementation_history.get(scope, {})
-
-        for idx, row in df.iterrows():
-            # Calculate the actual date for this row
-            if view_mode == 'hourly':
-                # All hours are from selected_date
-                row_date = selected_date
-            else:  # daily
-                # Calculate which date this day represents
-                selected_weekday = selected_date.weekday()  # 0=Monday, 6=Sunday
-                week_start = selected_date - timedelta(days=selected_weekday)
-
-                # Map day name to date
-                day_names = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
-                day_index = day_names.index(row['Day'])
-                row_date = week_start + timedelta(days=day_index)
-
-            date_key = row_date.strftime('%Y-%m-%d')
-
-            # Forecasted FTE (AI recommendation based on predicted traffic at 4:1 optimal ratio)
-            forecasted_fte += row['Predicted_Traffic'] / 4
-
-            # Realized FTE based on implementation decision
-            decision = store_history.get(date_key, {}).get('decision', None)
-
-            if decision == 1:  # Following AI
-                realized_fte += row['AI_Recommended_Staffing']
-            elif decision == 0:  # Using Legacy
-                realized_fte += row['Baseline_Staffing']
-            else:  # No decision yet, assume AI
-                realized_fte += row['AI_Recommended_Staffing']
-
-        efficiency = int((realized_fte / forecasted_fte * 100)) if forecasted_fte > 0 else 100
+        # Calculate conversion efficiency (improvement from baseline to AI)
+        conversion_improvement = ((ai_cr - baseline_cr) / baseline_cr * 100) if baseline_cr > 0 else 0
 
         # Store baseline and AI revenue for returning
-        return total_traffic, revenue, efficiency, baseline_revenue, ai_revenue, lost_revenue
+        return total_traffic, revenue, conversion_improvement, baseline_revenue, ai_revenue, lost_revenue, baseline_cr, ai_cr
 
 def calculate_forecast_accuracy(scope, stores_data, aggregate_data, selected_date):
     """
@@ -698,8 +630,22 @@ def apply_traffic_adjustments(stores_data, adjustments_dict, view_mode='hourly')
                     adjusted_value = int(original_value * (1 + adjustment / 100))
                     df_copy.loc[mask, 'Predicted_Traffic'] = adjusted_value
 
-                    # Recalculate AI recommended staffing based on new traffic
-                    df_copy.loc[mask, 'AI_Recommended_Staffing'] = int(adjusted_value * 0.93)
+                    # Recalculate AI recommended staffing based on new traffic using proper logic
+                    if view_mode == 'hourly':
+                        # Hourly staffing logic (optimal 4-5:1 STA ratio)
+                        if adjusted_value <= 6:
+                            ai_staff = 1
+                        elif adjusted_value <= 12:
+                            ai_staff = 2
+                        elif adjusted_value <= 16:
+                            ai_staff = 3
+                        else:
+                            ai_staff = min(4, max(3, int(adjusted_value / 5)))  # Cap at 4 staff
+                    else:
+                        # Daily staffing logic (total staff-hours per day, ~5:1 ratio)
+                        ai_staff = max(int(adjusted_value / 5), 18)  # Minimum 18 staff-hours per day
+
+                    df_copy.loc[mask, 'AI_Recommended_Staffing'] = ai_staff
 
         adjusted_data[store_name] = df_copy
 
@@ -845,24 +791,50 @@ if 'implementation_history' not in st.session_state:
             # Simulate historical implementation decisions - different adoption rates per store
             # 1 = Following AI, 0 = Using Legacy
             if store == "London":
-                # London has high adoption (85%)
-                decision = 1 if random.random() < 0.85 else 0
+                # London has very high adoption (95%)
+                decision = 1 if random.random() < 0.95 else 0
             elif store == "Copenhagen":
-                # Copenhagen has medium adoption (70%)
-                decision = 1 if random.random() < 0.70 else 0
+                # Copenhagen has high adoption (85%)
+                decision = 1 if random.random() < 0.85 else 0
             else:  # Paris
-                # Paris has high adoption (90%)
-                decision = 1 if random.random() < 0.90 else 0
+                # Paris has very high adoption (95%)
+                decision = 1 if random.random() < 0.95 else 0
 
             history[store][date] = {'decision': decision}
 
+        # Explicitly ensure today is NOT in the history (user must click button first)
+        today_str = datetime.now().strftime('%Y-%m-%d')
+        if today_str in history[store]:
+            del history[store][today_str]
+
     st.session_state.implementation_history = history
+
+# Track which stores have today's decision made (persistent across reruns)
+if 'todays_decisions' not in st.session_state:
+    st.session_state.todays_decisions = set()  # Set of store names that have today's decision
+
+# Check if we need to reset todays_decisions for a new day
+if 'last_check_date' not in st.session_state:
+    st.session_state.last_check_date = datetime.now().strftime('%Y-%m-%d')
+
+current_date = datetime.now().strftime('%Y-%m-%d')
+if st.session_state.last_check_date != current_date:
+    # It's a new day, reset all decisions
+    st.session_state.todays_decisions = set()
+    st.session_state.last_check_date = current_date
+
+# Always clear today's data for stores that haven't made a decision yet
+today_str = datetime.now().strftime('%Y-%m-%d')
+for store in ["London", "Copenhagen", "Paris"]:
+    if store not in st.session_state.todays_decisions:
+        # User hasn't made decision for this store today, so clear any existing data
+        if store in st.session_state.implementation_history:
+            st.session_state.implementation_history[store].pop(today_str, None)
 
 # ============================================================================
 # HELPER FUNCTIONS FOR FEEDBACK
 # ============================================================================
 
-@st.cache_data
 def generate_implementation_calendar(store_name):
     """Generate a calendar heatmap of AI adoption for a specific store"""
     # Get last 30 days including today
@@ -892,7 +864,6 @@ def generate_implementation_calendar(store_name):
 
     return df_calendar
 
-@st.cache_data
 def get_store_adoption_summary():
     """Get AI adoption rate for all stores (for regional manager view)"""
     stores = ["London", "Copenhagen", "Paris"]
@@ -1115,7 +1086,7 @@ st.markdown(f"""
 # ============================================================================
 # KPI ROW
 # ============================================================================
-traffic, revenue, efficiency, baseline_revenue, ai_revenue, lost_revenue = calculate_kpis(scope, stores_data, aggregate_data)
+traffic, revenue, conversion_improvement, baseline_revenue, ai_revenue, lost_revenue, baseline_cr, ai_cr = calculate_kpis(scope, stores_data, aggregate_data)
 
 col1, col2, col3 = st.columns(3)
 
@@ -1144,12 +1115,18 @@ with col2:
     """, unsafe_allow_html=True)
 
 with col3:
+    # Format conversion rates as percentages
+    baseline_cr_pct = baseline_cr * 100
+    ai_cr_pct = ai_cr * 100
+    improvement_color = "#34C759" if conversion_improvement > 0 else "#E74C3C"
+    improvement_symbol = "+" if conversion_improvement > 0 else ""
+
     st.markdown(f"""
     <div class="kpi-card kpi-card-with-tooltip">
-        <span class="tooltip-text"><strong>Staffing Efficiency</strong><br><br>Compares forecasted staffing needs (based on predicted traffic) versus realized staffing (what was actually implemented based on manager decisions).<br><br>Calculation: (Realized FTE / Forecasted FTE) × 100<br><br>100% = Perfect match between forecast and reality<br>&gt;100% = Overstaffing (used more staff than forecasted)<br>&lt;100% = Understaffing (used fewer staff than forecasted)<br><br>This metric helps identify if implementation decisions align with traffic predictions.</span>
-        <div class="kpi-title">Staffing Efficiency</div>
-        <div class="kpi-value">{efficiency}%</div>
-        <div class="kpi-subtitle">Forecast vs Realized</div>
+        <span class="tooltip-text"><strong>Conversion Efficiency</strong><br><br>Shows the conversion rate improvement achieved through AI-optimized staffing versus baseline (legacy) staffing.<br><br><strong>Baseline Conversion:</strong> {baseline_cr_pct:.1f}% (understaffed at 10:1 STA ratio)<br><strong>AI Optimized:</strong> {ai_cr_pct:.1f}% (optimal 4-5:1 STA ratio)<br><strong>Improvement:</strong> {improvement_symbol}{conversion_improvement:.1f}%<br><br>Uses dynamic conversion lift model based on Shopper-to-Associate ratios. Better staffing = better service = higher conversion = more revenue from same traffic.</span>
+        <div class="kpi-title">Conversion Efficiency 📊</div>
+        <div class="kpi-value">{ai_cr_pct:.1f}%</div>
+        <div class="kpi-subtitle">AI Optimized • Baseline: {baseline_cr_pct:.1f}%<br><span style="color: {improvement_color}; font-weight: 600;">{improvement_symbol}{conversion_improvement:.1f}%</span> improvement</div>
     </div>
     """, unsafe_allow_html=True)
 
@@ -1404,67 +1381,6 @@ with col_left:
         # STORE-SPECIFIC: Show 30-day calendar for this store
         df_calendar = generate_implementation_calendar(scope)
 
-        # Calculate adoption rates for display
-        def calculate_adoption_rates(df_cal):
-            """Calculate adoption rates for Today, 3 Days, and Week periods"""
-            today = pd.Timestamp.now().normalize()  # Use pandas Timestamp for consistency
-
-            # Today
-            today_mask = df_cal['Date'] == today
-            today_decision = df_cal[today_mask]['Decision'].values[0] if today_mask.any() else None
-            today_rate = 100.0 if today_decision == 1 else 0.0 if today_decision == 0 else None
-
-            # Last 3 days (including today)
-            three_days_ago = today - pd.Timedelta(days=2)
-            three_days_mask = (df_cal['Date'] >= three_days_ago) & (df_cal['Date'] <= today)
-            three_days_decisions = df_cal[three_days_mask]['Decision'].values
-            ai_count_3d = sum(1 for d in three_days_decisions if d == 1)
-            total_count_3d = sum(1 for d in three_days_decisions if d is not None)
-            three_days_rate = (ai_count_3d / total_count_3d * 100) if total_count_3d > 0 else 0.0
-
-            # Last 7 days (week, including today)
-            seven_days_ago = today - pd.Timedelta(days=6)
-            week_mask = (df_cal['Date'] >= seven_days_ago) & (df_cal['Date'] <= today)
-            week_decisions = df_cal[week_mask]['Decision'].values
-            ai_count_week = sum(1 for d in week_decisions if d == 1)
-            total_count_week = sum(1 for d in week_decisions if d is not None)
-            week_rate = (ai_count_week / total_count_week * 100) if total_count_week > 0 else 0.0
-
-            return today_rate, three_days_rate, week_rate, total_count_3d, total_count_week
-
-        today_rate, three_days_rate, week_rate, days_3d, days_week = calculate_adoption_rates(df_calendar)
-
-        # Display adoption metrics above heatmap
-        col_a1, col_a2, col_a3 = st.columns(3)
-
-        with col_a1:
-            today_color = get_adoption_color(today_rate) if today_rate is not None else "#999999"
-            today_display = f"{today_rate:.0f}%" if today_rate is not None else "N/A"
-            st.markdown(f"""
-            <div style="text-align: center; padding: 8px; background: #FAFAFA; border-radius: 6px; margin-bottom: 10px;">
-                <div style="color: #6B6B6B; font-size: 9px; font-weight: 600; text-transform: uppercase; margin-bottom: 3px;">Today</div>
-                <div style="color: {today_color}; font-size: 18px; font-weight: 700; line-height: 1;">{today_display}</div>
-            </div>
-            """, unsafe_allow_html=True)
-
-        with col_a2:
-            three_days_color = get_adoption_color(three_days_rate)
-            st.markdown(f"""
-            <div style="text-align: center; padding: 8px; background: #FAFAFA; border-radius: 6px; margin-bottom: 10px;">
-                <div style="color: #6B6B6B; font-size: 9px; font-weight: 600; text-transform: uppercase; margin-bottom: 3px;">3 Days ({days_3d})</div>
-                <div style="color: {three_days_color}; font-size: 18px; font-weight: 700; line-height: 1;">{three_days_rate:.0f}%</div>
-            </div>
-            """, unsafe_allow_html=True)
-
-        with col_a3:
-            week_color = get_adoption_color(week_rate)
-            st.markdown(f"""
-            <div style="text-align: center; padding: 8px; background: #FAFAFA; border-radius: 6px; margin-bottom: 10px;">
-                <div style="color: #6B6B6B; font-size: 9px; font-weight: 600; text-transform: uppercase; margin-bottom: 3px;">Week ({days_week})</div>
-                <div style="color: {week_color}; font-size: 18px; font-weight: 700; line-height: 1;">{week_rate:.0f}%</div>
-            </div>
-            """, unsafe_allow_html=True)
-
         # Create calendar heatmap
         fig_calendar = go.Figure()
 
@@ -1497,13 +1413,34 @@ with col_left:
 
                     if total_count > 0:
                         adoption_rate = (ai_count / total_count) * 100
+                        legacy_count = total_count - ai_count
                         week_data.append(adoption_rate)
-                        date_str = row['Date'].strftime('%b %d')
-                        week_hover.append(f"{date_str}<br>{adoption_rate:.0f}% AI Adoption<br>({ai_count}/{total_count} days)")
+                        date_str = row['Date'].strftime('%b %d, %Y')
+
+                        # Get today's specific decision for this cell
+                        today_date_str = datetime.now().strftime('%Y-%m-%d')
+                        is_today = row['Date'].strftime('%Y-%m-%d') == today_date_str
+                        today_marker = " 📍 TODAY" if is_today else ""
+
+                        week_hover.append(
+                            f"<b>{date_str}{today_marker}</b><br>"
+                            f"<b style='font-size:16px'>{adoption_rate:.1f}%</b> AI Adoption<br>"
+                            f"<br>"
+                            f"AI Clicks: <b>{ai_count}</b><br>"
+                            f"Legacy Clicks: <b>{legacy_count}</b><br>"
+                            f"Total Clicks: <b>{total_count}</b>"
+                        )
                     else:
                         week_data.append(None)  # No decision yet
-                        date_str = row['Date'].strftime('%b %d')
-                        week_hover.append(f"{date_str}<br>No decision yet")
+                        date_str = row['Date'].strftime('%b %d, %Y')
+
+                        # Check if this is today
+                        today_date_str = datetime.now().strftime('%Y-%m-%d')
+                        is_today = row['Date'].strftime('%Y-%m-%d') == today_date_str
+                        if is_today:
+                            week_hover.append(f"<b>{date_str} 📍 TODAY</b><br>⏳ Waiting for your decision...")
+                        else:
+                            week_hover.append(f"<b>{date_str}</b><br>No decision recorded")
                 else:
                     week_data.append(None)
                     week_hover.append("")
@@ -1586,7 +1523,7 @@ with col_left:
                 if scope not in st.session_state.implementation_history:
                     st.session_state.implementation_history[scope] = {}
                 st.session_state.implementation_history[scope][today_str] = {'decision': 1}
-                st.success("✅ Confirmed: Following AI recommendation")
+                st.session_state.todays_decisions.add(scope)  # Mark this store as having today's decision
                 st.rerun()
 
         with col_fb2:
@@ -1596,17 +1533,24 @@ with col_left:
                 if scope not in st.session_state.implementation_history:
                     st.session_state.implementation_history[scope] = {}
                 st.session_state.implementation_history[scope][today_str] = {'decision': 0}
-                st.success("✅ Confirmed: Using legacy system")
+                st.session_state.todays_decisions.add(scope)  # Mark this store as having today's decision
                 st.rerun()
 
-        # Show today's decision
+        # Show today's decision status
         today_str = datetime.now().strftime('%Y-%m-%d')
-        if scope in st.session_state.implementation_history and today_str in st.session_state.implementation_history[scope]:
+
+        # Debug: Check if store is in todays_decisions
+        is_decided = scope in st.session_state.todays_decisions
+        has_data = scope in st.session_state.implementation_history and today_str in st.session_state.implementation_history[scope]
+
+        if has_data:
             decision = st.session_state.implementation_history[scope][today_str]['decision']
             if decision == 1:
-                st.info("🎯 **Today's Decision**: Following AI Recommendation")
+                st.success("✅ **Today's Decision Recorded**: Following AI Recommendation - The heatmap has been updated!")
             else:
-                st.info("📋 **Today's Decision**: Using Legacy System")
+                st.warning("⚠️ **Today's Decision Recorded**: Using Legacy System - The heatmap has been updated!")
+        else:
+            st.info("⏳ **No decision recorded yet for today** - Click a button above to record your staffing decision")
 
     else:
         # REGIONAL MANAGER VIEW: Show AI adoption comparison across all stores
@@ -1800,16 +1744,23 @@ with col_right:
     # Calculate difference (runs for both individual and aggregate)
     fte_difference = baseline_fte - ai_fte
 
-    # Revenue impact calculation (per day or per week based on view)
-    # The AI system optimally staffs to match traffic patterns, improving service quality
-    # Better staffing during peaks = better customer experience = higher conversion rates
-    conversion_rate = 0.20  # 20% baseline conversion
-    avg_ticket_dkk = 931.25  # $125 × 7.45 DKK/USD
+    # Revenue impact calculation using dynamic conversion lift model
+    # Calculate actual total staffing for the period (not just averages)
+    if scope != "All Stores (Aggregate)":
+        total_baseline_staffing = df['Baseline_Staffing'].sum()
+        total_ai_staffing = df['AI_Recommended_Staffing'].sum()
+    else:
+        total_baseline_staffing = 0
+        total_ai_staffing = 0
+        for store_name, df_store in stores_data.items():
+            total_baseline_staffing += df_store['Baseline_Staffing'].sum()
+            total_ai_staffing += df_store['AI_Recommended_Staffing'].sum()
 
-    # Calculate potential revenue from optimal staffing
-    # Optimal staffing improves conversion by ~5-8% through reduced wait times and better service
-    conversion_improvement = 0.05  # 5% improvement in conversion rate
-    revenue_impact = int(total_traffic * conversion_improvement * conversion_rate * avg_ticket_dkk)
+    # Use the dynamic conversion lift model (same as Revenue Recovery KPI)
+    baseline_revenue_data = calculate_dynamic_revenue(total_traffic, total_baseline_staffing)
+    ai_revenue_data = calculate_dynamic_revenue(total_traffic, total_ai_staffing)
+
+    revenue_impact = ai_revenue_data['revenue'] - baseline_revenue_data['revenue']
 
     # For hourly view, this is per day. For daily view, this is per week
     if st.session_state.view_mode == 'hourly':
@@ -1820,30 +1771,34 @@ with col_right:
         revenue_per_day = revenue_impact // 7
 
     # Create a styled recommendation box
+    # Get STA ratios for context
+    baseline_sta = (total_traffic / total_baseline_staffing) if total_baseline_staffing > 0 else 0
+    ai_sta = (total_traffic / total_ai_staffing) if total_ai_staffing > 0 else 0
+
     if fte_difference > 0:
         # Legacy system is overstaffed - but still show revenue opportunity from better allocation
         recommendation_color = "#E8F5E9"  # Light green
         recommendation_text = f"The AI system recommends an average of <strong>{ai_fte:.1f} FTE per day</strong> compared to the legacy system's <strong>{baseline_fte:.1f} FTE per day</strong> (a reduction of {abs(fte_difference):.1f} FTE). The legacy system maintains flat staffing levels, while AI dynamically allocates staff to peak periods."
         if st.session_state.view_mode == 'hourly':
-            impact_text = f"By reallocating staff to match traffic patterns (more staff during peaks, fewer during slow periods), you can <strong>capture an estimated {revenue_per_day:,} kr per day</strong> in additional revenue through improved customer service during high-traffic hours."
+            impact_text = f"By optimizing staff allocation (targeting 4-5:1 STA ratio), you can <strong>capture an estimated {revenue_per_day:,} kr per day</strong> in additional revenue. Current baseline STA: {baseline_sta:.1f}:1, AI optimized: {ai_sta:.1f}:1."
         else:
-            impact_text = f"By reallocating staff to match traffic patterns (more staff during peaks, fewer during slow periods), you can <strong>capture an estimated {revenue_per_day:,} kr per day</strong> ({revenue_weekly:,} kr per week) in additional revenue through improved customer service during high-traffic hours."
+            impact_text = f"By optimizing staff allocation (targeting 4-5:1 STA ratio), you can <strong>capture an estimated {revenue_per_day:,} kr per day</strong> ({revenue_weekly:,} kr per week) in additional revenue. Current baseline STA: {baseline_sta:.1f}:1, AI optimized: {ai_sta:.1f}:1."
     elif fte_difference < 0:
         # Legacy system is understaffed
         recommendation_color = "#FFF3E0"  # Light orange
         recommendation_text = f"The AI system recommends an average of <strong>{ai_fte:.1f} FTE per day</strong> compared to the legacy system's <strong>{baseline_fte:.1f} FTE per day</strong> (an increase of {abs(fte_difference):.1f} FTE). The legacy system under-allocates staff during peak traffic periods, leading to missed sales opportunities."
         if st.session_state.view_mode == 'hourly':
-            impact_text = f"By adding staff during high-traffic periods, you can <strong>capture an estimated {revenue_per_day:,} kr per day</strong> in additional revenue from improved customer service and reduced wait times."
+            impact_text = f"By adding staff to reach optimal 4-5:1 STA ratio during peaks, you can <strong>capture an estimated {revenue_per_day:,} kr per day</strong> in additional revenue. Current baseline STA: {baseline_sta:.1f}:1 (understaffed), AI optimized: {ai_sta:.1f}:1."
         else:
-            impact_text = f"By adding staff during high-traffic periods, you can <strong>capture an estimated {revenue_per_day:,} kr per day</strong> ({revenue_weekly:,} kr per week) in additional revenue from improved customer service and reduced wait times."
+            impact_text = f"By adding staff to reach optimal 4-5:1 STA ratio during peaks, you can <strong>capture an estimated {revenue_per_day:,} kr per day</strong> ({revenue_weekly:,} kr per week) in additional revenue. Current baseline STA: {baseline_sta:.1f}:1 (understaffed), AI optimized: {ai_sta:.1f}:1."
     else:
         # Equal staffing
         recommendation_color = "#E3F2FD"  # Light blue
         recommendation_text = f"The AI system's average staffing recommendation ({ai_fte:.1f} FTE per day) closely matches the legacy system."
         if st.session_state.view_mode == 'hourly':
-            impact_text = f"However, the AI system dynamically adjusts staffing to match traffic patterns throughout the day. This optimal allocation can still <strong>generate an estimated {revenue_per_day:,} kr per day</strong> through better peak coverage and improved customer experience."
+            impact_text = f"However, the AI system dynamically adjusts staffing to maintain optimal 4-5:1 STA ratio throughout the day. This can still <strong>generate an estimated {revenue_per_day:,} kr per day</strong> through better peak coverage."
         else:
-            impact_text = f"However, the AI system dynamically adjusts staffing to match traffic patterns throughout the week. This optimal allocation can still <strong>generate an estimated {revenue_per_day:,} kr per day</strong> ({revenue_weekly:,} kr per week) through better peak coverage and improved customer experience."
+            impact_text = f"However, the AI system dynamically adjusts staffing to maintain optimal 4-5:1 STA ratio throughout the week. This can still <strong>generate an estimated {revenue_per_day:,} kr per day</strong> ({revenue_weekly:,} kr per week) through better peak coverage."
 
     st.markdown(f"""
         <div style="background: {recommendation_color}; border-radius: 12px; padding: 24px; margin-bottom: 20px; border-left: 4px solid #F2B8C6;">
@@ -1906,9 +1861,9 @@ with col_right:
         adoption_week = (sum([1 for d in days_7 if d == 1]) / len([d for d in days_7 if d is not None]) * 100) if any(d is not None for d in days_7) else 0
     else:
         # Aggregate adoption across all stores
-        adoption_today = 85.0
-        adoption_3days = 81.7
-        adoption_week = 83.3
+        adoption_today = 91.7
+        adoption_3days = 91.7
+        adoption_week = 91.7
 
     # Data Completeness and Freshness
     data_today = 100.0

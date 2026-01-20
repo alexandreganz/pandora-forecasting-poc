@@ -365,9 +365,9 @@ st.session_state.view_mode = 'hourly'  # or 'daily'
 ```
 
 **Mock Data Generation:**
-- London: 85% AI adoption rate
-- Copenhagen: 70% AI adoption rate
-- Paris: 90% AI adoption rate
+- London: 95% AI adoption rate
+- Copenhagen: 85% AI adoption rate
+- Paris: 95% AI adoption rate
 
 ## Business Value & KPIs
 
