@@ -304,11 +304,11 @@ def generate_store_hourly_data(store_name, date):
             actual_traffic = int(traffic * (1 + variance))
         # Future dates or future hours: actual_traffic remains None
 
-        # Baseline staffing (legacy - flat)
-        baseline_staff = params["base"] - 15
+        # Baseline staffing (legacy - flat, understaffed at ~6:1 ratio)
+        baseline_staff = max(int(traffic / 6), 10)  # Minimum 10 staff
 
-        # AI recommended (matches traffic)
-        ai_staff = int(traffic * 0.93)
+        # AI recommended (optimal at ~4:1 ratio)
+        ai_staff = max(int(traffic / 4), 10)  # Minimum 10 staff
 
         data.append({
             'Hour': hour,
@@ -385,11 +385,11 @@ def generate_store_daily_data(store_name, date):
                 actual_traffic = int(traffic * (1 + variance))
         # Future week: actual_traffic remains None
 
-        # Baseline staffing (legacy - flat)
-        baseline_staff = params["base"] - 120
+        # Baseline staffing (legacy - understaffed at ~6:1 ratio)
+        baseline_staff = max(int(traffic / 6), 100)  # Minimum 100 staff per day
 
-        # AI recommended (matches traffic)
-        ai_staff = int(traffic * 0.93)
+        # AI recommended (optimal at ~4:1 ratio)
+        ai_staff = max(int(traffic / 4), 150)  # Minimum 150 staff per day
 
         data.append({
             'Day': day,
@@ -486,18 +486,18 @@ def calculate_kpis(scope, stores_data, aggregate_data):
 
                 date_key = row_date.strftime('%Y-%m-%d')
 
-                # Forecasted FTE (AI recommendation based on predicted traffic)
-                forecasted_fte += row['Predicted_Traffic'] / 50
+                # Forecasted FTE (AI recommendation based on predicted traffic at 4:1 optimal ratio)
+                forecasted_fte += row['Predicted_Traffic'] / 4
 
                 # Realized FTE based on implementation decision
                 decision = store_history.get(date_key, {}).get('decision', None)
 
                 if decision == 1:  # Following AI
-                    realized_fte += row['AI_Recommended_Staffing'] / 50
+                    realized_fte += row['AI_Recommended_Staffing']
                 elif decision == 0:  # Using Legacy
-                    realized_fte += row['Baseline_Staffing'] / 50
+                    realized_fte += row['Baseline_Staffing']
                 else:  # No decision yet, assume AI
-                    realized_fte += row['AI_Recommended_Staffing'] / 50
+                    realized_fte += row['AI_Recommended_Staffing']
 
         efficiency = int((realized_fte / forecasted_fte * 100)) if forecasted_fte > 0 else 100
 
@@ -548,18 +548,18 @@ def calculate_kpis(scope, stores_data, aggregate_data):
 
             date_key = row_date.strftime('%Y-%m-%d')
 
-            # Forecasted FTE (AI recommendation based on predicted traffic)
-            forecasted_fte += row['Predicted_Traffic'] / 50
+            # Forecasted FTE (AI recommendation based on predicted traffic at 4:1 optimal ratio)
+            forecasted_fte += row['Predicted_Traffic'] / 4
 
             # Realized FTE based on implementation decision
             decision = store_history.get(date_key, {}).get('decision', None)
 
             if decision == 1:  # Following AI
-                realized_fte += row['AI_Recommended_Staffing'] / 50
+                realized_fte += row['AI_Recommended_Staffing']
             elif decision == 0:  # Using Legacy
-                realized_fte += row['Baseline_Staffing'] / 50
+                realized_fte += row['Baseline_Staffing']
             else:  # No decision yet, assume AI
-                realized_fte += row['AI_Recommended_Staffing'] / 50
+                realized_fte += row['AI_Recommended_Staffing']
 
         efficiency = int((realized_fte / forecasted_fte * 100)) if forecasted_fte > 0 else 100
 
@@ -678,28 +678,28 @@ def calculate_adjusted_conversion_rate(sta_ratio):
     Calculate the adjusted conversion rate based on Shopper-to-Associate (STA) ratio
 
     Logic:
-    - Baseline CR: 20% at 50:1 ratio (adjusted for data model where 1 FTE = 50 visit capacity)
-    - For every 10 additional shoppers per staff, CR drops by 1.5% absolute
-    - For every 10 fewer shoppers per staff, CR increases by 2.0% absolute
-    - Maximum CR: 30% (ceiling)
+    - Baseline CR: 20% at 4:1 ratio (4 shoppers per 1 staff member)
+    - For every 1 additional shopper per staff, CR drops by 1.5% absolute
+    - For every 1 fewer shopper per staff, CR increases by 2.0% absolute
+    - Maximum CR: 30% (ceiling), Minimum CR: 5% (floor)
 
     Args:
-        sta_ratio: Shopper-to-Associate ratio (traffic / FTE)
+        sta_ratio: Shopper-to-Associate ratio (traffic / staff_count)
 
     Returns:
         Adjusted conversion rate as decimal (0.20 = 20%)
     """
-    baseline_ratio = 50.0  # Baseline adjusted for data model
-    baseline_cr = 0.20     # 20% baseline conversion
+    baseline_ratio = 4.0  # 4 shoppers per 1 staff member (optimal)
+    baseline_cr = 0.20    # 20% baseline conversion
 
-    # Calculate difference from baseline (in units of 10 for reasonable scaling)
-    ratio_difference = (sta_ratio - baseline_ratio) / 10.0
+    # Calculate difference from baseline
+    ratio_difference = sta_ratio - baseline_ratio
 
     if ratio_difference > 0:
-        # Higher ratio (understaffed) - CR drops by 1.5% per 10 additional shoppers
+        # Higher ratio (understaffed) - CR drops by 1.5% per additional shopper per staff
         adjusted_cr = baseline_cr - (ratio_difference * 0.015)
     else:
-        # Lower ratio (better staffed) - CR increases by 2.0% per 10 fewer shoppers
+        # Lower ratio (better staffed) - CR increases by 2.0% per fewer shopper per staff
         adjusted_cr = baseline_cr + (abs(ratio_difference) * 0.020)
 
     # Apply ceiling of 30% and floor of 5% (minimum viable conversion)
@@ -713,7 +713,7 @@ def calculate_dynamic_revenue(traffic, staffing, atv_dkk=931.25):
 
     Args:
         traffic: Total customer visits
-        staffing: Total staffing hours (or FTE equivalent)
+        staffing: Total staff count (number of employees)
         atv_dkk: Average ticket value in DKK (default: 931.25 = $125 × 7.45)
 
     Returns:
@@ -725,12 +725,10 @@ def calculate_dynamic_revenue(traffic, staffing, atv_dkk=931.25):
     if staffing <= 0:
         staffing = 1  # Avoid division by zero
 
-    # Calculate STA ratio
-    # staffing is already in "visit equivalents" (1 FTE = 50 visits)
-    # So STA ratio = traffic / (staffing / 50)
-    sta_ratio = traffic / (staffing / 50)
+    # Calculate STA ratio (shoppers per staff member)
+    sta_ratio = traffic / staffing
 
-    # Get adjusted conversion rate
+    # Get adjusted conversion rate based on STA ratio
     adjusted_cr = calculate_adjusted_conversion_rate(sta_ratio)
 
     # Calculate revenue
@@ -1062,7 +1060,7 @@ with col2:
 
     st.markdown(f"""
     <div class="kpi-card kpi-card-with-tooltip">
-        <span class="tooltip-text"><strong>Conversion Lift Model</strong><br><br>Dynamic conversion rate based on Shopper-to-Associate (STA) ratio:<br><br><strong>Baseline:</strong> 20% CR at optimal 50:1 ratio<br><strong>Understaffed:</strong> CR drops 1.5% for every 10 additional shoppers per staff<br><strong>Better Staffed:</strong> CR increases 2.0% for every 10 fewer shoppers per staff<br><strong>Range:</strong> 5% minimum to 30% maximum<br><br>Formula: Total Visits × Adjusted CR × $125 ATV (931 kr)<br><br>Better staffing during peak hours reduces wait times and improves service quality, directly impacting conversion rates.</span>
+        <span class="tooltip-text"><strong>Conversion Lift Model</strong><br><br>Dynamic conversion rate based on Shopper-to-Associate (STA) ratio:<br><br><strong>Baseline:</strong> 20% CR at optimal 4:1 ratio (4 shoppers per staff)<br><strong>Understaffed:</strong> CR drops 1.5% for each additional shopper per staff<br><strong>Better Staffed:</strong> CR increases 2.0% for each fewer shopper per staff<br><strong>Range:</strong> 5% minimum to 30% maximum<br><br>Formula: Total Visits × Adjusted CR × $125 ATV (931 kr)<br><br>Better staffing during peak hours reduces wait times and improves service quality, directly impacting conversion rates.</span>
         <div class="kpi-title">Revenue Recovery 💡</div>
         <div class="kpi-value">{ai_revenue:,} kr</div>
         <div class="kpi-subtitle">AI Optimized • Baseline: {baseline_revenue:,} kr<br><span style="color: {diff_color}; font-weight: 600;">{diff_symbol}{revenue_diff:,} kr</span> vs Baseline</div>
@@ -1167,9 +1165,9 @@ with col_left:
         time_col = 'Hour' if st.session_state.view_mode == 'hourly' else 'Day'
         x_axis_title = 'Hour of Day' if st.session_state.view_mode == 'hourly' else 'Day of Week'
 
-        # Convert staffing to FTE (1 FTE per 50 visits)
-        df['Baseline_FTE'] = df['Baseline_Staffing'] / 50
-        df['AI_FTE'] = df['AI_Recommended_Staffing'] / 50
+        # Staffing is already in FTE (staff count)
+        df['Baseline_FTE'] = df['Baseline_Staffing']
+        df['AI_FTE'] = df['AI_Recommended_Staffing']
 
         # Calculate confidence intervals for predicted traffic (±10% typical for retail forecasting)
         df['Predicted_Upper'] = df['Predicted_Traffic'] * 1.10
@@ -1425,8 +1423,8 @@ with col_left:
         # Get AI recommendation for display
         if scope in stores_data:
             df_store = stores_data[scope]
-            ai_fte_avg = (df_store['AI_Recommended_Staffing'] / 50).mean()
-            baseline_fte_avg = (df_store['Baseline_Staffing'] / 50).mean()
+            ai_fte_avg = df_store['AI_Recommended_Staffing'].mean()
+            baseline_fte_avg = df_store['Baseline_Staffing'].mean()
         else:
             ai_fte_avg = 0
             baseline_fte_avg = 0
@@ -1631,9 +1629,9 @@ with col_right:
         # Individual store
         df = stores_data[scope].copy()
 
-        # Calculate FTE from adjusted staffing values (1 FTE per 50 customer visits)
-        df['Baseline_FTE'] = df['Baseline_Staffing'] / 50
-        df['AI_FTE'] = df['AI_Recommended_Staffing'] / 50
+        # Staffing is already in FTE (staff count)
+        df['Baseline_FTE'] = df['Baseline_Staffing']
+        df['AI_FTE'] = df['AI_Recommended_Staffing']
 
         # Calculate averages for the current view period
         # For hourly: average FTE across the operating day
@@ -1649,8 +1647,8 @@ with col_right:
 
         for store_name, df in stores_data.items():
             df = df.copy()
-            df['Baseline_FTE'] = df['Baseline_Staffing'] / 50
-            df['AI_FTE'] = df['AI_Recommended_Staffing'] / 50
+            df['Baseline_FTE'] = df['Baseline_Staffing']
+            df['AI_FTE'] = df['AI_Recommended_Staffing']
 
             baseline_fte_sum += df['Baseline_FTE'].mean()
             ai_fte_sum += df['AI_FTE'].mean()
