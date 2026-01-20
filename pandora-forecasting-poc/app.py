@@ -62,7 +62,7 @@ st.markdown("""
         padding: 20px;
         text-align: center;
         box-shadow: 0 1px 4px rgba(0, 0, 0, 0.02);
-        height: 140px;
+        min-height: 140px;
         display: flex;
         flex-direction: column;
         justify-content: center;
@@ -125,21 +125,22 @@ st.markdown("""
         font-weight: 600;
         text-transform: uppercase;
         letter-spacing: 1.2px;
-        margin-bottom: 12px;
+        margin-bottom: 10px;
     }
 
     .kpi-value {
         color: #F2B8C6;
-        font-size: 40px;
+        font-size: 32px;
         font-weight: 700;
         line-height: 1;
-        margin-bottom: 8px;
+        margin-bottom: 6px;
     }
 
     .kpi-subtitle {
         color: #999999;
-        font-size: 11px;
+        font-size: 10px;
         font-weight: 400;
+        line-height: 1.4;
     }
 
     /* Status Badges */
