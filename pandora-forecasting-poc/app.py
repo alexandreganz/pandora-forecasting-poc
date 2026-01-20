@@ -438,8 +438,28 @@ def calculate_kpis(scope, stores_data, aggregate_data):
 
     if scope == "All Stores (Aggregate)":
         total_traffic = int(aggregate_data['Total_Traffic'].sum())
-        # Potential Sales: 20% conversion rate * $125 avg ticket * 7.45 DKK/USD = 931.25 DKK per sale
-        revenue = int(total_traffic * 0.20 * 931.25)
+
+        # Calculate total baseline and AI staffing across all stores
+        total_baseline_staffing = 0
+        total_ai_staffing = 0
+
+        for store_name, df in stores_data.items():
+            total_baseline_staffing += df['Baseline_Staffing'].sum()
+            total_ai_staffing += df['AI_Recommended_Staffing'].sum()
+
+        # Calculate dynamic revenue with baseline staffing
+        baseline_revenue_data = calculate_dynamic_revenue(total_traffic, total_baseline_staffing)
+        baseline_revenue = baseline_revenue_data['revenue']
+
+        # Calculate dynamic revenue with AI staffing
+        ai_revenue_data = calculate_dynamic_revenue(total_traffic, total_ai_staffing)
+        ai_revenue = ai_revenue_data['revenue']
+
+        # Calculate lost revenue (positive = lost opportunity, negative = savings)
+        lost_revenue = ai_revenue - baseline_revenue
+
+        # Return AI revenue as the primary metric
+        revenue = ai_revenue
 
         # Calculate efficiency across all stores
         forecasted_fte = 0
@@ -480,11 +500,30 @@ def calculate_kpis(scope, stores_data, aggregate_data):
                     realized_fte += row['AI_Recommended_Staffing'] / 50
 
         efficiency = int((realized_fte / forecasted_fte * 100)) if forecasted_fte > 0 else 100
+
+        # Store baseline and AI revenue for returning
+        return total_traffic, revenue, efficiency, baseline_revenue, ai_revenue, lost_revenue
     else:
         df = stores_data[scope]
         total_traffic = int(df['Predicted_Traffic'].sum())
-        # Potential Sales: 20% conversion rate * $125 avg ticket * 7.45 DKK/USD = 931.25 DKK per sale
-        revenue = int(total_traffic * 0.20 * 931.25)
+
+        # Calculate total baseline and AI staffing for the store
+        total_baseline_staffing = df['Baseline_Staffing'].sum()
+        total_ai_staffing = df['AI_Recommended_Staffing'].sum()
+
+        # Calculate dynamic revenue with baseline staffing
+        baseline_revenue_data = calculate_dynamic_revenue(total_traffic, total_baseline_staffing)
+        baseline_revenue = baseline_revenue_data['revenue']
+
+        # Calculate dynamic revenue with AI staffing
+        ai_revenue_data = calculate_dynamic_revenue(total_traffic, total_ai_staffing)
+        ai_revenue = ai_revenue_data['revenue']
+
+        # Calculate lost revenue (positive = lost opportunity, negative = savings)
+        lost_revenue = ai_revenue - baseline_revenue
+
+        # Return AI revenue as the primary metric
+        revenue = ai_revenue
 
         # Calculate efficiency for individual store
         forecasted_fte = 0
@@ -524,7 +563,8 @@ def calculate_kpis(scope, stores_data, aggregate_data):
 
         efficiency = int((realized_fte / forecasted_fte * 100)) if forecasted_fte > 0 else 100
 
-    return total_traffic, revenue, efficiency
+        # Store baseline and AI revenue for returning
+        return total_traffic, revenue, efficiency, baseline_revenue, ai_revenue, lost_revenue
 
 def calculate_forecast_accuracy(scope, stores_data, aggregate_data, selected_date):
     """
@@ -632,6 +672,75 @@ def apply_traffic_adjustments(stores_data, adjustments_dict, view_mode='hourly')
         adjusted_data[store_name] = df_copy
 
     return adjusted_data
+
+def calculate_adjusted_conversion_rate(sta_ratio):
+    """
+    Calculate the adjusted conversion rate based on Shopper-to-Associate (STA) ratio
+
+    Logic:
+    - Baseline CR: 20% at 4:1 ratio (4 shoppers per 1 staff)
+    - For every 1 additional shopper per staff (higher ratio), CR drops by 1.5% absolute
+    - For every 1 fewer shopper per staff (lower ratio), CR increases by 2.0% absolute
+    - Maximum CR: 30% (ceiling)
+
+    Args:
+        sta_ratio: Shopper-to-Associate ratio (traffic / staff_hours or traffic / (staffing/50))
+
+    Returns:
+        Adjusted conversion rate as decimal (0.20 = 20%)
+    """
+    baseline_ratio = 4.0  # 4 shoppers per 1 staff
+    baseline_cr = 0.20    # 20% baseline conversion
+
+    # Calculate difference from baseline
+    ratio_difference = sta_ratio - baseline_ratio
+
+    if ratio_difference > 0:
+        # Higher ratio (understaffed) - CR drops by 1.5% per additional shopper
+        adjusted_cr = baseline_cr - (ratio_difference * 0.015)
+    else:
+        # Lower ratio (better staffed) - CR increases by 2.0% per fewer shopper
+        adjusted_cr = baseline_cr + (abs(ratio_difference) * 0.020)
+
+    # Apply ceiling of 30% and floor of 0%
+    adjusted_cr = min(max(adjusted_cr, 0.0), 0.30)
+
+    return adjusted_cr
+
+def calculate_dynamic_revenue(traffic, staffing, atv_dkk=931.25):
+    """
+    Calculate potential revenue based on dynamic conversion rate
+
+    Args:
+        traffic: Total customer visits
+        staffing: Total staffing hours (or FTE equivalent)
+        atv_dkk: Average ticket value in DKK (default: 931.25 = $125 × 7.45)
+
+    Returns:
+        Dictionary with revenue details:
+        - 'revenue': Total potential revenue
+        - 'conversion_rate': Applied conversion rate
+        - 'sta_ratio': Calculated shopper-to-associate ratio
+    """
+    if staffing <= 0:
+        staffing = 1  # Avoid division by zero
+
+    # Calculate STA ratio
+    # staffing is already in "visit equivalents" (1 FTE = 50 visits)
+    # So STA ratio = traffic / (staffing / 50)
+    sta_ratio = traffic / (staffing / 50)
+
+    # Get adjusted conversion rate
+    adjusted_cr = calculate_adjusted_conversion_rate(sta_ratio)
+
+    # Calculate revenue
+    revenue = int(traffic * adjusted_cr * atv_dkk)
+
+    return {
+        'revenue': revenue,
+        'conversion_rate': adjusted_cr,
+        'sta_ratio': sta_ratio
+    }
 
 # ============================================================================
 # SESSION STATE INITIALIZATION
@@ -932,7 +1041,7 @@ st.markdown(f"""
 # ============================================================================
 # KPI ROW
 # ============================================================================
-traffic, revenue, efficiency = calculate_kpis(scope, stores_data, aggregate_data)
+traffic, revenue, efficiency, baseline_revenue, ai_revenue, lost_revenue = calculate_kpis(scope, stores_data, aggregate_data)
 
 col1, col2, col3 = st.columns(3)
 
@@ -946,12 +1055,17 @@ with col1:
     """, unsafe_allow_html=True)
 
 with col2:
+    # Calculate revenue difference and format display
+    revenue_diff = lost_revenue
+    diff_symbol = "+" if revenue_diff > 0 else ""
+    diff_color = "#34C759" if revenue_diff > 0 else "#E74C3C" if revenue_diff < 0 else "#6B6B6B"
+
     st.markdown(f"""
     <div class="kpi-card kpi-card-with-tooltip">
-        <span class="tooltip-text"><strong>Potential Sales Revenue</strong><br><br>Calculation: Total Visits × 20% Conversion Rate × $125 Avg Ticket Price<br><br>Of all predicted customer visits, approximately 20% convert into actual sales. With an average transaction value of $125 USD (931 kr), this represents the total potential sales revenue. Better staffing ensures we capture more of these conversion opportunities by reducing wait times and improving customer experience.</span>
+        <span class="tooltip-text"><strong>Conversion Lift Model</strong><br><br>This uses a dynamic conversion rate based on the Shopper-to-Associate (STA) ratio:<br><br><strong>Baseline:</strong> 20% CR at 4:1 ratio (4 shoppers per staff)<br><strong>Understaffed:</strong> CR drops 1.5% for each additional shopper per staff<br><strong>Better Staffed:</strong> CR increases 2.0% for each fewer shopper per staff (max 30%)<br><br>Calculation: Total Visits × Adjusted CR × $125 ATV (931 kr)<br><br>Optimal staffing improves conversion rates by reducing wait times and improving customer service quality.</span>
         <div class="kpi-title">Revenue Recovery 💡</div>
-        <div class="kpi-value">{revenue:,} kr</div>
-        <div class="kpi-subtitle">Potential Sales</div>
+        <div class="kpi-value">{ai_revenue:,} kr</div>
+        <div class="kpi-subtitle">AI Optimized • Baseline: {baseline_revenue:,} kr<br><span style="color: {diff_color}; font-weight: 600;">{diff_symbol}{revenue_diff:,} kr</span> vs Baseline</div>
     </div>
     """, unsafe_allow_html=True)
 
