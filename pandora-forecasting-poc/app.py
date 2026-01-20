@@ -784,6 +784,39 @@ def calculate_dynamic_revenue(traffic, staffing, atv_dkk=931.25):
     }
 
 # ============================================================================
+# METRIC COLOR HELPERS
+# ============================================================================
+
+def get_adoption_color(value):
+    """AI Adoption Rate: <60% red, 60-80% orange, >80% green"""
+    if value < 60:
+        return "#E74C3C"  # Red
+    elif value < 80:
+        return "#FF9500"  # Orange
+    else:
+        return "#34C759"  # Green
+
+def get_data_quality_color(value):
+    """Data Quality: <95% red, 95-99.4% orange, >=99.5% green"""
+    if value < 95:
+        return "#E74C3C"  # Red
+    elif value < 99.5:
+        return "#FF9500"  # Orange
+    else:
+        return "#34C759"  # Green
+
+def get_accuracy_color(value):
+    """Forecast Accuracy: <90% red, 90-93% orange, >93% green"""
+    if value == 0.0:  # N/A case
+        return "#999999"  # Grey
+    if value < 90:
+        return "#E74C3C"  # Red
+    elif value <= 93:
+        return "#FF9500"  # Orange
+    else:
+        return "#34C759"  # Green
+
+# ============================================================================
 # SESSION STATE INITIALIZATION
 # ============================================================================
 if 'traffic_adjustments' not in st.session_state:
@@ -1371,6 +1404,67 @@ with col_left:
         # STORE-SPECIFIC: Show 30-day calendar for this store
         df_calendar = generate_implementation_calendar(scope)
 
+        # Calculate adoption rates for display
+        def calculate_adoption_rates(df_cal):
+            """Calculate adoption rates for Today, 3 Days, and Week periods"""
+            today = datetime.now()
+
+            # Today
+            today_mask = df_cal['Date'] == today.date()
+            today_decision = df_cal[today_mask]['Decision'].values[0] if today_mask.any() else None
+            today_rate = 100.0 if today_decision == 1 else 0.0 if today_decision == 0 else None
+
+            # Last 3 days (including today)
+            three_days_ago = today - timedelta(days=2)
+            three_days_mask = (df_cal['Date'] >= three_days_ago.date()) & (df_cal['Date'] <= today.date())
+            three_days_decisions = df_cal[three_days_mask]['Decision'].values
+            ai_count_3d = sum(1 for d in three_days_decisions if d == 1)
+            total_count_3d = sum(1 for d in three_days_decisions if d is not None)
+            three_days_rate = (ai_count_3d / total_count_3d * 100) if total_count_3d > 0 else 0.0
+
+            # Last 7 days (week, including today)
+            seven_days_ago = today - timedelta(days=6)
+            week_mask = (df_cal['Date'] >= seven_days_ago.date()) & (df_cal['Date'] <= today.date())
+            week_decisions = df_cal[week_mask]['Decision'].values
+            ai_count_week = sum(1 for d in week_decisions if d == 1)
+            total_count_week = sum(1 for d in week_decisions if d is not None)
+            week_rate = (ai_count_week / total_count_week * 100) if total_count_week > 0 else 0.0
+
+            return today_rate, three_days_rate, week_rate, total_count_3d, total_count_week
+
+        today_rate, three_days_rate, week_rate, days_3d, days_week = calculate_adoption_rates(df_calendar)
+
+        # Display adoption metrics above heatmap
+        col_a1, col_a2, col_a3 = st.columns(3)
+
+        with col_a1:
+            today_color = get_adoption_color(today_rate) if today_rate is not None else "#999999"
+            today_display = f"{today_rate:.0f}%" if today_rate is not None else "N/A"
+            st.markdown(f"""
+            <div style="text-align: center; padding: 8px; background: #FAFAFA; border-radius: 6px; margin-bottom: 10px;">
+                <div style="color: #6B6B6B; font-size: 9px; font-weight: 600; text-transform: uppercase; margin-bottom: 3px;">Today</div>
+                <div style="color: {today_color}; font-size: 18px; font-weight: 700; line-height: 1;">{today_display}</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+        with col_a2:
+            three_days_color = get_adoption_color(three_days_rate)
+            st.markdown(f"""
+            <div style="text-align: center; padding: 8px; background: #FAFAFA; border-radius: 6px; margin-bottom: 10px;">
+                <div style="color: #6B6B6B; font-size: 9px; font-weight: 600; text-transform: uppercase; margin-bottom: 3px;">3 Days ({days_3d})</div>
+                <div style="color: {three_days_color}; font-size: 18px; font-weight: 700; line-height: 1;">{three_days_rate:.0f}%</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+        with col_a3:
+            week_color = get_adoption_color(week_rate)
+            st.markdown(f"""
+            <div style="text-align: center; padding: 8px; background: #FAFAFA; border-radius: 6px; margin-bottom: 10px;">
+                <div style="color: #6B6B6B; font-size: 9px; font-weight: 600; text-transform: uppercase; margin-bottom: 3px;">Week ({days_week})</div>
+                <div style="color: {week_color}; font-size: 18px; font-weight: 700; line-height: 1;">{week_rate:.0f}%</div>
+            </div>
+            """, unsafe_allow_html=True)
+
         # Create calendar heatmap
         fig_calendar = go.Figure()
 
@@ -1823,37 +1917,7 @@ with col_right:
         scope, stores_data, aggregate_data, selected_date
     )
 
-    # Helper function to determine metric colors based on thresholds
-    def get_adoption_color(value):
-        """AI Adoption Rate: <60% red, 60-80% orange, >80% green"""
-        if value < 60:
-            return "#E74C3C"  # Red
-        elif value < 80:
-            return "#FF9500"  # Orange
-        else:
-            return "#34C759"  # Green
-
-    def get_data_quality_color(value):
-        """Data Quality: <95% red, 95-99.4% orange, >=99.5% green"""
-        if value < 95:
-            return "#E74C3C"  # Red
-        elif value < 99.5:
-            return "#FF9500"  # Orange
-        else:
-            return "#34C759"  # Green
-
-    def get_accuracy_color(value):
-        """Forecast Accuracy: <90% red, 90-93% orange, >93% green"""
-        if value == 0.0:  # N/A case
-            return "#999999"  # Grey
-        if value < 90:
-            return "#E74C3C"  # Red
-        elif value <= 93:
-            return "#FF9500"  # Orange
-        else:
-            return "#34C759"  # Green
-
-    # Get colors for each metric
+    # Get colors for each metric (using global helper functions)
     adoption_color_today = get_adoption_color(adoption_today)
     adoption_color_3days = get_adoption_color(adoption_3days)
     adoption_color_week = get_adoption_color(adoption_week)
