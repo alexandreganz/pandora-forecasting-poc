@@ -310,25 +310,26 @@ def generate_store_hourly_data(store_name, date):
         # Future dates or future hours: actual_traffic remains None
 
         # AI-recommended staffing (3-tier Pandora intensity model)
-        # Low Intensity (0-15): 1 staff | Moderate (16-30): 2-3 staff | High (31+): 4+ staff
+        # Optimized for 4:1 shopper-to-staff ratio
+        # Low Intensity (0-15): 2-3 staff | Moderate (16-30): 4-7 staff | High (31+): 8+ staff
         if traffic <= 15:
-            ai_staff = 1
+            ai_staff = max(2, int(traffic / 5))  # Aim for ~5-7:1 ratio
         elif traffic <= 30:
             # Moderate intensity - highest lift per dollar
-            ai_staff = 2 if traffic <= 23 else 3
+            ai_staff = max(4, int(traffic / 5))  # Aim for ~5:1 ratio
         else:
-            # High intensity - prevent survival mode
-            ai_staff = 4 + max(0, int((traffic - 31) / 10))  # +1 staff per 10 additional visitors
+            # High intensity - prevent survival mode, aim for 4:1
+            ai_staff = max(8, int(traffic / 4))  # Aim for 4:1 ratio
 
-        # Baseline staffing (legacy - understaffed, higher ratios)
-        # Always 1 less than optimal to show the impact of understaffing
+        # Baseline staffing (legacy - understaffed at ~8-10:1 ratio)
+        # Always understaffed to show impact
         if traffic <= 15:
-            baseline_staff = 1  # Can't go lower at low intensity
+            baseline_staff = 1  # Severely understaffed
         elif traffic <= 30:
-            baseline_staff = 1 if traffic <= 23 else 2  # Understaffed by 1
+            baseline_staff = max(2, int(traffic / 10))  # ~10:1 ratio
         else:
-            # Significantly understaffed at high intensity
-            baseline_staff = max(2, ai_staff - 2)  # 2 fewer staff, min 2
+            # High intensity but understaffed
+            baseline_staff = max(3, int(traffic / 10))  # ~10:1 ratio
 
         data.append({
             'Hour': hour,
@@ -409,27 +410,13 @@ def generate_store_daily_data(store_name, date):
         # Calculate average hourly traffic for staffing estimation
         avg_hourly = traffic / 12  # 12-hour operating day
 
-        # AI-recommended staffing (sum across 12 hours using 3-tier model)
-        # Estimate staff-hours needed per day
-        if avg_hourly <= 15:
-            # Low intensity average - need ~1 staff for most hours
-            ai_staff = 12  # 12 staff-hours (1 per hour)
-        elif avg_hourly <= 25:
-            # Moderate intensity average - need ~2-3 staff
-            ai_staff = 30  # ~2.5 staff-hours per hour
-        else:
-            # High intensity average - need 4+ staff
-            ai_staff = 48 + max(0, int((avg_hourly - 25) * 2))  # 4+ staff-hours per hour
+        # AI-recommended staffing (total staff-hours per day, aiming for ~4-5:1 ratio)
+        # Staff needed = traffic / optimal_ratio
+        ai_staff = max(int(traffic / 4.5), 24)  # Minimum 24 staff-hours per day (2 per hour)
 
-        # Baseline staffing (understaffed - 1 staff less on average)
-        # Creates higher STA ratios showing impact of understaffing
-        if avg_hourly <= 15:
-            baseline_staff = 12  # Can't reduce at low intensity
-        elif avg_hourly <= 25:
-            baseline_staff = 18  # ~1.5 staff per hour (understaffed)
-        else:
-            # Significantly understaffed
-            baseline_staff = max(24, ai_staff - 15)  # 15 fewer staff-hours per day
+        # Baseline staffing (understaffed at ~10:1 ratio)
+        # Always significantly understaffed to demonstrate impact
+        baseline_staff = max(int(traffic / 10), 12)  # Minimum 12 staff-hours per day (1 per hour)
 
         data.append({
             'Day': day,
@@ -526,8 +513,8 @@ def calculate_kpis(scope, stores_data, aggregate_data):
 
                 date_key = row_date.strftime('%Y-%m-%d')
 
-                # Forecasted FTE (AI recommendation based on predicted traffic at 10:1 optimal ratio)
-                forecasted_fte += row['Predicted_Traffic'] / 10
+                # Forecasted FTE (AI recommendation based on predicted traffic at 4:1 optimal ratio)
+                forecasted_fte += row['Predicted_Traffic'] / 4
 
                 # Realized FTE based on implementation decision
                 decision = store_history.get(date_key, {}).get('decision', None)
@@ -588,8 +575,8 @@ def calculate_kpis(scope, stores_data, aggregate_data):
 
             date_key = row_date.strftime('%Y-%m-%d')
 
-            # Forecasted FTE (AI recommendation based on predicted traffic at 10:1 optimal ratio)
-            forecasted_fte += row['Predicted_Traffic'] / 10
+            # Forecasted FTE (AI recommendation based on predicted traffic at 4:1 optimal ratio)
+            forecasted_fte += row['Predicted_Traffic'] / 4
 
             # Realized FTE based on implementation decision
             decision = store_history.get(date_key, {}).get('decision', None)
@@ -719,7 +706,7 @@ def calculate_adjusted_conversion_rate(sta_ratio):
     Calibrated for realistic Pandora jewelry store operations
 
     Logic:
-    - Baseline CR: 20% at 10:1 ratio (optimal Pandora staffing)
+    - Baseline CR: 20% at 4:1 ratio (4 shoppers per 1 staff member)
     - For every 1 additional shopper per staff, CR drops by 1.5% absolute
     - For every 1 fewer shopper per staff, CR increases by 2.0% absolute
     - Maximum CR: 30% (ceiling), Minimum CR: 5% (floor)
@@ -731,8 +718,8 @@ def calculate_adjusted_conversion_rate(sta_ratio):
     Returns:
         Adjusted conversion rate as decimal (0.20 = 20%)
     """
-    baseline_ratio = 10.0  # 10 shoppers per 1 staff (optimal for Pandora)
-    baseline_cr = 0.20     # 20% baseline conversion
+    baseline_ratio = 4.0  # 4 shoppers per 1 staff (optimal)
+    baseline_cr = 0.20    # 20% baseline conversion
 
     # Calculate difference from baseline
     ratio_difference = sta_ratio - baseline_ratio
@@ -743,7 +730,7 @@ def calculate_adjusted_conversion_rate(sta_ratio):
         if sta_ratio > 15:
             # Survival mode: staff only process transactions, stop selling
             # Base decline + accelerated penalty
-            base_decline = 5 * 0.015  # First 5 points of decline
+            base_decline = 11 * 0.015  # First 11 points of decline (from 4:1 to 15:1)
             survival_penalty = (sta_ratio - 15) * 0.025  # 2.5% per point above 15:1
             adjusted_cr = baseline_cr - base_decline - survival_penalty
         else:
@@ -1111,7 +1098,7 @@ with col2:
 
     st.markdown(f"""
     <div class="kpi-card kpi-card-with-tooltip">
-        <span class="tooltip-text"><strong>Conversion Lift Model</strong> (Calibrated for Pandora)<br><br>Dynamic CR based on Shopper-to-Associate (STA) ratio:<br><br><strong>Optimal:</strong> 20% CR at 10:1 ratio (Pandora standard)<br><strong>Understaffed:</strong> CR drops 1.5% per additional shopper/staff<br><strong>Survival Mode (15:1+):</strong> CR crashes 2.5% per point (staff only process transactions, stop selling)<br><strong>Better Staffed:</strong> CR increases 2.0% per fewer shopper/staff<br><strong>Range:</strong> 5% minimum to 30% maximum<br><br>Formula: Total Visits × Adjusted CR × $125 ATV (931 kr)<br><br>Based on Pandora intensity levels: Low (0-15/hr) = 1 staff, Moderate (16-30/hr) = 2-3 staff, High (31+/hr) = 4+ staff</span>
+        <span class="tooltip-text"><strong>Conversion Lift Model</strong> (Calibrated for Pandora)<br><br>Dynamic CR based on Shopper-to-Associate (STA) ratio:<br><br><strong>Optimal:</strong> 20% CR at 4:1 ratio (4 shoppers per staff)<br><strong>Understaffed:</strong> CR drops 1.5% per additional shopper/staff<br><strong>Survival Mode (15:1+):</strong> CR crashes 2.5% per point (staff only process transactions, stop selling)<br><strong>Better Staffed:</strong> CR increases 2.0% per fewer shopper/staff<br><strong>Range:</strong> 5% minimum to 30% maximum<br><br>Formula: Total Visits × Adjusted CR × $125 ATV (931 kr)<br><br>Based on Pandora intensity levels: Low (0-15/hr), Moderate (16-30/hr), High (31+/hr). AI aims for 4-5:1, Baseline runs at 10:1 (understaffed).</span>
         <div class="kpi-title">Revenue Recovery 💡</div>
         <div class="kpi-value">{ai_revenue:,} kr</div>
         <div class="kpi-subtitle">AI Optimized • Baseline: {baseline_revenue:,} kr<br><span style="color: {diff_color}; font-weight: 600;">{diff_symbol}{revenue_diff:,} kr</span> vs Baseline</div>
