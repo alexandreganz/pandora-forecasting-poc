@@ -245,8 +245,8 @@ st.markdown("""
 # DATA GENERATION FUNCTIONS
 # ============================================================================
 
-@st.cache_data
-def generate_store_hourly_data(store_name, date):
+@st.cache_data(hash_funcs={"builtins.datetime": lambda x: x.isoformat()})
+def generate_store_hourly_data(store_name, date, _cache_version="v2_scaled"):
     """
     Generate hourly synthetic data for a specific store
 
@@ -343,8 +343,8 @@ def generate_store_hourly_data(store_name, date):
 
     return pd.DataFrame(data)
 
-@st.cache_data
-def generate_store_daily_data(store_name, date):
+@st.cache_data(hash_funcs={"builtins.datetime": lambda x: x.isoformat()})
+def generate_store_daily_data(store_name, date, _cache_version="v2_scaled"):
     """
     Generate daily synthetic data for a specific store (7 days)
 
@@ -434,16 +434,16 @@ def generate_store_daily_data(store_name, date):
     return pd.DataFrame(data)
 
 @st.cache_data
-def generate_all_stores_data(date, view_mode='hourly'):
+def generate_all_stores_data(date, view_mode='hourly', _cache_version="v2_scaled"):
     """Generate data for all stores"""
     stores = ["London", "Copenhagen", "Paris"]
     stores_data = {}
 
     for store in stores:
         if view_mode == 'hourly':
-            stores_data[store] = generate_store_hourly_data(store, date)
+            stores_data[store] = generate_store_hourly_data(store, date, _cache_version)
         else:  # daily
-            stores_data[store] = generate_store_daily_data(store, date)
+            stores_data[store] = generate_store_daily_data(store, date, _cache_version)
 
     return stores_data
 
@@ -934,7 +934,7 @@ with st.sidebar:
 # ============================================================================
 # DATA GENERATION (needs to happen here before traffic adjustment tool uses it)
 # ============================================================================
-stores_data = generate_all_stores_data(selected_date, st.session_state.view_mode)
+stores_data = generate_all_stores_data(selected_date, st.session_state.view_mode, "v2_scaled")
 
 # Apply any manual traffic adjustments
 stores_data = apply_traffic_adjustments(stores_data, st.session_state.traffic_adjustments, st.session_state.view_mode)
