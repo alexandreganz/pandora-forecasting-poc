@@ -262,14 +262,15 @@ def generate_store_hourly_data(store_name, date):
     # Operating hours: 9 AM to 9 PM
     hours = [f"{h:02d}:00" for h in range(9, 21)]
 
-    # Store-specific parameters
+    # Store-specific parameters - Realistic Pandora traffic (visitors/hr)
+    # Low Intensity: 0-15 visitors/hr, Moderate: 16-30, High: 31+
     store_params = {
-        "London": {"base": 110, "peak_boost": 45, "peak_hours": [12, 13, 17, 18, 19]},
-        "Copenhagen": {"base": 80, "peak_boost": 35, "peak_hours": [11, 14, 16, 18]},
-        "Paris": {"base": 90, "peak_boost": 40, "peak_hours": [13, 15, 17, 18]}
+        "London": {"base": 20, "peak_boost": 18, "peak_hours": [12, 13, 17, 18, 19]},
+        "Copenhagen": {"base": 15, "peak_boost": 12, "peak_hours": [11, 14, 16, 18]},
+        "Paris": {"base": 18, "peak_boost": 15, "peak_hours": [13, 15, 17, 18]}
     }
 
-    params = store_params.get(store_name, {"base": 100, "peak_boost": 35, "peak_hours": [12, 18]})
+    params = store_params.get(store_name, {"base": 18, "peak_boost": 15, "peak_hours": [12, 18]})
 
     # Check if selected date is today or in the past
     today = datetime.now().date()
@@ -283,15 +284,18 @@ def generate_store_hourly_data(store_name, date):
     for i, hour in enumerate(hours):
         hour_num = int(hour.split(':')[0])
 
-        # Base traffic with random variation
-        traffic = params["base"] + np.random.randint(-8, 12)
+        # Base traffic with random variation (realistic Pandora levels)
+        traffic = params["base"] + np.random.randint(-3, 5)
 
         # Peak hour boost
         if hour_num in params["peak_hours"]:
             traffic += params["peak_boost"]
 
-        # Gradual increase throughout the day
-        traffic += int(i * 4.5)
+        # Gradual increase throughout the day (opening hours ramp up)
+        if i < 4:  # First few hours - lower traffic
+            traffic = int(traffic * 0.6)
+        elif i > 8:  # Evening - moderate decline
+            traffic = int(traffic * 0.85)
 
         # Generate actual traffic (with slight variance from predicted)
         actual_traffic = None
@@ -305,11 +309,26 @@ def generate_store_hourly_data(store_name, date):
             actual_traffic = int(traffic * (1 + variance))
         # Future dates or future hours: actual_traffic remains None
 
-        # Baseline staffing (legacy - flat, understaffed at ~6:1 ratio)
-        baseline_staff = max(int(traffic / 6), 10)  # Minimum 10 staff
+        # AI-recommended staffing (3-tier Pandora intensity model)
+        # Low Intensity (0-15): 1 staff | Moderate (16-30): 2-3 staff | High (31+): 4+ staff
+        if traffic <= 15:
+            ai_staff = 1
+        elif traffic <= 30:
+            # Moderate intensity - highest lift per dollar
+            ai_staff = 2 if traffic <= 23 else 3
+        else:
+            # High intensity - prevent survival mode
+            ai_staff = 4 + max(0, int((traffic - 31) / 10))  # +1 staff per 10 additional visitors
 
-        # AI recommended (optimal at ~4:1 ratio)
-        ai_staff = max(int(traffic / 4), 10)  # Minimum 10 staff
+        # Baseline staffing (legacy - understaffed, higher ratios)
+        # Always 1 less than optimal to show the impact of understaffing
+        if traffic <= 15:
+            baseline_staff = 1  # Can't go lower at low intensity
+        elif traffic <= 30:
+            baseline_staff = 1 if traffic <= 23 else 2  # Understaffed by 1
+        else:
+            # Significantly understaffed at high intensity
+            baseline_staff = max(2, ai_staff - 2)  # 2 fewer staff, min 2
 
         data.append({
             'Hour': hour,
@@ -338,14 +357,15 @@ def generate_store_daily_data(store_name, date):
     # Days of the week
     days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
 
-    # Store-specific parameters
+    # Store-specific parameters - Realistic Pandora daily traffic
+    # Based on 12-hour operating day (9 AM - 9 PM)
     store_params = {
-        "London": {"base": 950, "weekend_boost": 450, "peak_days": [4, 5, 6]},  # Fri, Sat, Sun
-        "Copenhagen": {"base": 720, "weekend_boost": 320, "peak_days": [3, 5, 6]},  # Thu, Sat, Sun
-        "Paris": {"base": 810, "weekend_boost": 380, "peak_days": [4, 5, 6]}   # Fri, Sat, Sun
+        "London": {"base": 280, "weekend_boost": 120, "peak_days": [4, 5, 6]},  # Fri, Sat, Sun
+        "Copenhagen": {"base": 220, "weekend_boost": 90, "peak_days": [3, 5, 6]},  # Thu, Sat, Sun
+        "Paris": {"base": 250, "weekend_boost": 105, "peak_days": [4, 5, 6]}   # Fri, Sat, Sun
     }
 
-    params = store_params.get(store_name, {"base": 850, "weekend_boost": 350, "peak_days": [5, 6]})
+    params = store_params.get(store_name, {"base": 250, "weekend_boost": 100, "peak_days": [5, 6]})
 
     # Determine which days should show actual traffic based on selected date
     today = datetime.now().date()
@@ -364,7 +384,7 @@ def generate_store_daily_data(store_name, date):
     data = []
     for i, day in enumerate(days):
         # Base traffic with random variation
-        traffic = params["base"] + np.random.randint(-50, 80)
+        traffic = params["base"] + np.random.randint(-20, 30)
 
         # Weekend/peak day boost
         if i in params["peak_days"]:
@@ -386,11 +406,30 @@ def generate_store_daily_data(store_name, date):
                 actual_traffic = int(traffic * (1 + variance))
         # Future week: actual_traffic remains None
 
-        # Baseline staffing (legacy - understaffed at ~6:1 ratio)
-        baseline_staff = max(int(traffic / 6), 100)  # Minimum 100 staff per day
+        # Calculate average hourly traffic for staffing estimation
+        avg_hourly = traffic / 12  # 12-hour operating day
 
-        # AI recommended (optimal at ~4:1 ratio)
-        ai_staff = max(int(traffic / 4), 150)  # Minimum 150 staff per day
+        # AI-recommended staffing (sum across 12 hours using 3-tier model)
+        # Estimate staff-hours needed per day
+        if avg_hourly <= 15:
+            # Low intensity average - need ~1 staff for most hours
+            ai_staff = 12  # 12 staff-hours (1 per hour)
+        elif avg_hourly <= 25:
+            # Moderate intensity average - need ~2-3 staff
+            ai_staff = 30  # ~2.5 staff-hours per hour
+        else:
+            # High intensity average - need 4+ staff
+            ai_staff = 48 + max(0, int((avg_hourly - 25) * 2))  # 4+ staff-hours per hour
+
+        # Baseline staffing (understaffed - 1 staff less on average)
+        # Creates higher STA ratios showing impact of understaffing
+        if avg_hourly <= 15:
+            baseline_staff = 12  # Can't reduce at low intensity
+        elif avg_hourly <= 25:
+            baseline_staff = 18  # ~1.5 staff per hour (understaffed)
+        else:
+            # Significantly understaffed
+            baseline_staff = max(24, ai_staff - 15)  # 15 fewer staff-hours per day
 
         data.append({
             'Day': day,
@@ -487,8 +526,8 @@ def calculate_kpis(scope, stores_data, aggregate_data):
 
                 date_key = row_date.strftime('%Y-%m-%d')
 
-                # Forecasted FTE (AI recommendation based on predicted traffic at 4:1 optimal ratio)
-                forecasted_fte += row['Predicted_Traffic'] / 4
+                # Forecasted FTE (AI recommendation based on predicted traffic at 10:1 optimal ratio)
+                forecasted_fte += row['Predicted_Traffic'] / 10
 
                 # Realized FTE based on implementation decision
                 decision = store_history.get(date_key, {}).get('decision', None)
@@ -549,8 +588,8 @@ def calculate_kpis(scope, stores_data, aggregate_data):
 
             date_key = row_date.strftime('%Y-%m-%d')
 
-            # Forecasted FTE (AI recommendation based on predicted traffic at 4:1 optimal ratio)
-            forecasted_fte += row['Predicted_Traffic'] / 4
+            # Forecasted FTE (AI recommendation based on predicted traffic at 10:1 optimal ratio)
+            forecasted_fte += row['Predicted_Traffic'] / 10
 
             # Realized FTE based on implementation decision
             decision = store_history.get(date_key, {}).get('decision', None)
@@ -677,12 +716,14 @@ def apply_traffic_adjustments(stores_data, adjustments_dict, view_mode='hourly')
 def calculate_adjusted_conversion_rate(sta_ratio):
     """
     Calculate the adjusted conversion rate based on Shopper-to-Associate (STA) ratio
+    Calibrated for realistic Pandora jewelry store operations
 
     Logic:
-    - Baseline CR: 20% at 4:1 ratio (4 shoppers per 1 staff member)
+    - Baseline CR: 20% at 10:1 ratio (optimal Pandora staffing)
     - For every 1 additional shopper per staff, CR drops by 1.5% absolute
     - For every 1 fewer shopper per staff, CR increases by 2.0% absolute
     - Maximum CR: 30% (ceiling), Minimum CR: 5% (floor)
+    - At 15:1+ ratio, enters "survival mode" with accelerated CR decline
 
     Args:
         sta_ratio: Shopper-to-Associate ratio (traffic / staff_count)
@@ -690,15 +731,24 @@ def calculate_adjusted_conversion_rate(sta_ratio):
     Returns:
         Adjusted conversion rate as decimal (0.20 = 20%)
     """
-    baseline_ratio = 4.0  # 4 shoppers per 1 staff member (optimal)
-    baseline_cr = 0.20    # 20% baseline conversion
+    baseline_ratio = 10.0  # 10 shoppers per 1 staff (optimal for Pandora)
+    baseline_cr = 0.20     # 20% baseline conversion
 
     # Calculate difference from baseline
     ratio_difference = sta_ratio - baseline_ratio
 
     if ratio_difference > 0:
-        # Higher ratio (understaffed) - CR drops by 1.5% per additional shopper per staff
-        adjusted_cr = baseline_cr - (ratio_difference * 0.015)
+        # Higher ratio (understaffed) - CR drops
+        # Accelerated decline if ratio exceeds 15:1 (survival mode)
+        if sta_ratio > 15:
+            # Survival mode: staff only process transactions, stop selling
+            # Base decline + accelerated penalty
+            base_decline = 5 * 0.015  # First 5 points of decline
+            survival_penalty = (sta_ratio - 15) * 0.025  # 2.5% per point above 15:1
+            adjusted_cr = baseline_cr - base_decline - survival_penalty
+        else:
+            # Normal decline: 1.5% per additional shopper per staff
+            adjusted_cr = baseline_cr - (ratio_difference * 0.015)
     else:
         # Lower ratio (better staffed) - CR increases by 2.0% per fewer shopper per staff
         adjusted_cr = baseline_cr + (abs(ratio_difference) * 0.020)
@@ -1061,7 +1111,7 @@ with col2:
 
     st.markdown(f"""
     <div class="kpi-card kpi-card-with-tooltip">
-        <span class="tooltip-text"><strong>Conversion Lift Model</strong><br><br>Dynamic conversion rate based on Shopper-to-Associate (STA) ratio:<br><br><strong>Baseline:</strong> 20% CR at optimal 4:1 ratio (4 shoppers per staff)<br><strong>Understaffed:</strong> CR drops 1.5% for each additional shopper per staff<br><strong>Better Staffed:</strong> CR increases 2.0% for each fewer shopper per staff<br><strong>Range:</strong> 5% minimum to 30% maximum<br><br>Formula: Total Visits × Adjusted CR × $125 ATV (931 kr)<br><br>Better staffing during peak hours reduces wait times and improves service quality, directly impacting conversion rates.</span>
+        <span class="tooltip-text"><strong>Conversion Lift Model</strong> (Calibrated for Pandora)<br><br>Dynamic CR based on Shopper-to-Associate (STA) ratio:<br><br><strong>Optimal:</strong> 20% CR at 10:1 ratio (Pandora standard)<br><strong>Understaffed:</strong> CR drops 1.5% per additional shopper/staff<br><strong>Survival Mode (15:1+):</strong> CR crashes 2.5% per point (staff only process transactions, stop selling)<br><strong>Better Staffed:</strong> CR increases 2.0% per fewer shopper/staff<br><strong>Range:</strong> 5% minimum to 30% maximum<br><br>Formula: Total Visits × Adjusted CR × $125 ATV (931 kr)<br><br>Based on Pandora intensity levels: Low (0-15/hr) = 1 staff, Moderate (16-30/hr) = 2-3 staff, High (31+/hr) = 4+ staff</span>
         <div class="kpi-title">Revenue Recovery 💡</div>
         <div class="kpi-value">{ai_revenue:,} kr</div>
         <div class="kpi-subtitle">AI Optimized • Baseline: {baseline_revenue:,} kr<br><span style="color: {diff_color}; font-weight: 600;">{diff_symbol}{revenue_diff:,} kr</span> vs Baseline</div>
