@@ -678,32 +678,32 @@ def calculate_adjusted_conversion_rate(sta_ratio):
     Calculate the adjusted conversion rate based on Shopper-to-Associate (STA) ratio
 
     Logic:
-    - Baseline CR: 20% at 4:1 ratio (4 shoppers per 1 staff)
-    - For every 1 additional shopper per staff (higher ratio), CR drops by 1.5% absolute
-    - For every 1 fewer shopper per staff (lower ratio), CR increases by 2.0% absolute
+    - Baseline CR: 20% at 50:1 ratio (adjusted for data model where 1 FTE = 50 visit capacity)
+    - For every 10 additional shoppers per staff, CR drops by 1.5% absolute
+    - For every 10 fewer shoppers per staff, CR increases by 2.0% absolute
     - Maximum CR: 30% (ceiling)
 
     Args:
-        sta_ratio: Shopper-to-Associate ratio (traffic / staff_hours or traffic / (staffing/50))
+        sta_ratio: Shopper-to-Associate ratio (traffic / FTE)
 
     Returns:
         Adjusted conversion rate as decimal (0.20 = 20%)
     """
-    baseline_ratio = 4.0  # 4 shoppers per 1 staff
-    baseline_cr = 0.20    # 20% baseline conversion
+    baseline_ratio = 50.0  # Baseline adjusted for data model
+    baseline_cr = 0.20     # 20% baseline conversion
 
-    # Calculate difference from baseline
-    ratio_difference = sta_ratio - baseline_ratio
+    # Calculate difference from baseline (in units of 10 for reasonable scaling)
+    ratio_difference = (sta_ratio - baseline_ratio) / 10.0
 
     if ratio_difference > 0:
-        # Higher ratio (understaffed) - CR drops by 1.5% per additional shopper
+        # Higher ratio (understaffed) - CR drops by 1.5% per 10 additional shoppers
         adjusted_cr = baseline_cr - (ratio_difference * 0.015)
     else:
-        # Lower ratio (better staffed) - CR increases by 2.0% per fewer shopper
+        # Lower ratio (better staffed) - CR increases by 2.0% per 10 fewer shoppers
         adjusted_cr = baseline_cr + (abs(ratio_difference) * 0.020)
 
-    # Apply ceiling of 30% and floor of 0%
-    adjusted_cr = min(max(adjusted_cr, 0.0), 0.30)
+    # Apply ceiling of 30% and floor of 5% (minimum viable conversion)
+    adjusted_cr = min(max(adjusted_cr, 0.05), 0.30)
 
     return adjusted_cr
 
@@ -1062,7 +1062,7 @@ with col2:
 
     st.markdown(f"""
     <div class="kpi-card kpi-card-with-tooltip">
-        <span class="tooltip-text"><strong>Conversion Lift Model</strong><br><br>This uses a dynamic conversion rate based on the Shopper-to-Associate (STA) ratio:<br><br><strong>Baseline:</strong> 20% CR at 4:1 ratio (4 shoppers per staff)<br><strong>Understaffed:</strong> CR drops 1.5% for each additional shopper per staff<br><strong>Better Staffed:</strong> CR increases 2.0% for each fewer shopper per staff (max 30%)<br><br>Calculation: Total Visits × Adjusted CR × $125 ATV (931 kr)<br><br>Optimal staffing improves conversion rates by reducing wait times and improving customer service quality.</span>
+        <span class="tooltip-text"><strong>Conversion Lift Model</strong><br><br>Dynamic conversion rate based on Shopper-to-Associate (STA) ratio:<br><br><strong>Baseline:</strong> 20% CR at optimal 50:1 ratio<br><strong>Understaffed:</strong> CR drops 1.5% for every 10 additional shoppers per staff<br><strong>Better Staffed:</strong> CR increases 2.0% for every 10 fewer shoppers per staff<br><strong>Range:</strong> 5% minimum to 30% maximum<br><br>Formula: Total Visits × Adjusted CR × $125 ATV (931 kr)<br><br>Better staffing during peak hours reduces wait times and improves service quality, directly impacting conversion rates.</span>
         <div class="kpi-title">Revenue Recovery 💡</div>
         <div class="kpi-value">{ai_revenue:,} kr</div>
         <div class="kpi-subtitle">AI Optimized • Baseline: {baseline_revenue:,} kr<br><span style="color: {diff_color}; font-weight: 600;">{diff_symbol}{revenue_diff:,} kr</span> vs Baseline</div>
