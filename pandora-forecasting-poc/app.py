@@ -1407,24 +1407,24 @@ with col_left:
         # Calculate adoption rates for display
         def calculate_adoption_rates(df_cal):
             """Calculate adoption rates for Today, 3 Days, and Week periods"""
-            today = datetime.now()
+            today = pd.Timestamp.now().normalize()  # Use pandas Timestamp for consistency
 
             # Today
-            today_mask = df_cal['Date'] == today.date()
+            today_mask = df_cal['Date'] == today
             today_decision = df_cal[today_mask]['Decision'].values[0] if today_mask.any() else None
             today_rate = 100.0 if today_decision == 1 else 0.0 if today_decision == 0 else None
 
             # Last 3 days (including today)
-            three_days_ago = today - timedelta(days=2)
-            three_days_mask = (df_cal['Date'] >= three_days_ago.date()) & (df_cal['Date'] <= today.date())
+            three_days_ago = today - pd.Timedelta(days=2)
+            three_days_mask = (df_cal['Date'] >= three_days_ago) & (df_cal['Date'] <= today)
             three_days_decisions = df_cal[three_days_mask]['Decision'].values
             ai_count_3d = sum(1 for d in three_days_decisions if d == 1)
             total_count_3d = sum(1 for d in three_days_decisions if d is not None)
             three_days_rate = (ai_count_3d / total_count_3d * 100) if total_count_3d > 0 else 0.0
 
             # Last 7 days (week, including today)
-            seven_days_ago = today - timedelta(days=6)
-            week_mask = (df_cal['Date'] >= seven_days_ago.date()) & (df_cal['Date'] <= today.date())
+            seven_days_ago = today - pd.Timedelta(days=6)
+            week_mask = (df_cal['Date'] >= seven_days_ago) & (df_cal['Date'] <= today)
             week_decisions = df_cal[week_mask]['Decision'].values
             ai_count_week = sum(1 for d in week_decisions if d == 1)
             total_count_week = sum(1 for d in week_decisions if d is not None)
