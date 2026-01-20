@@ -262,15 +262,15 @@ def generate_store_hourly_data(store_name, date):
     # Operating hours: 9 AM to 9 PM
     hours = [f"{h:02d}:00" for h in range(9, 21)]
 
-    # Store-specific parameters - Realistic Pandora traffic (visitors/hr)
-    # Low Intensity: 0-15 visitors/hr, Moderate: 16-30, High: 31+
+    # Store-specific parameters - Scaled for small luxury jewelry store (visitors/hr)
+    # Typical range: 5-20 visitors/hr
     store_params = {
-        "London": {"base": 20, "peak_boost": 18, "peak_hours": [12, 13, 17, 18, 19]},
-        "Copenhagen": {"base": 15, "peak_boost": 12, "peak_hours": [11, 14, 16, 18]},
-        "Paris": {"base": 18, "peak_boost": 15, "peak_hours": [13, 15, 17, 18]}
+        "London": {"base": 12, "peak_boost": 8, "peak_hours": [12, 13, 17, 18, 19]},
+        "Copenhagen": {"base": 8, "peak_boost": 6, "peak_hours": [11, 14, 16, 18]},
+        "Paris": {"base": 10, "peak_boost": 7, "peak_hours": [13, 15, 17, 18]}
     }
 
-    params = store_params.get(store_name, {"base": 18, "peak_boost": 15, "peak_hours": [12, 18]})
+    params = store_params.get(store_name, {"base": 10, "peak_boost": 7, "peak_hours": [12, 18]})
 
     # Check if selected date is today or in the past
     today = datetime.now().date()
@@ -284,8 +284,8 @@ def generate_store_hourly_data(store_name, date):
     for i, hour in enumerate(hours):
         hour_num = int(hour.split(':')[0])
 
-        # Base traffic with random variation (realistic Pandora levels)
-        traffic = params["base"] + np.random.randint(-3, 5)
+        # Base traffic with random variation
+        traffic = params["base"] + np.random.randint(-2, 3)
 
         # Peak hour boost
         if hour_num in params["peak_hours"]:
@@ -296,6 +296,9 @@ def generate_store_hourly_data(store_name, date):
             traffic = int(traffic * 0.6)
         elif i > 8:  # Evening - moderate decline
             traffic = int(traffic * 0.85)
+
+        # Ensure minimum of 3 visitors/hr (never empty store)
+        traffic = max(3, traffic)
 
         # Generate actual traffic (with slight variance from predicted)
         actual_traffic = None
@@ -309,27 +312,26 @@ def generate_store_hourly_data(store_name, date):
             actual_traffic = int(traffic * (1 + variance))
         # Future dates or future hours: actual_traffic remains None
 
-        # AI-recommended staffing (3-tier Pandora intensity model)
-        # Optimized for 4:1 shopper-to-staff ratio
-        # Low Intensity (0-15): 2-3 staff | Moderate (16-30): 4-7 staff | High (31+): 8+ staff
-        if traffic <= 15:
-            ai_staff = max(2, int(traffic / 5))  # Aim for ~5-7:1 ratio
-        elif traffic <= 30:
-            # Moderate intensity - highest lift per dollar
-            ai_staff = max(4, int(traffic / 5))  # Aim for ~5:1 ratio
+        # AI-recommended staffing (optimal for small luxury store)
+        # Aims for 4-5:1 shopper-to-staff ratio
+        if traffic <= 6:
+            ai_staff = 1  # Very quiet, 1 staff sufficient
+        elif traffic <= 12:
+            ai_staff = 2  # ~6:1 ratio
+        elif traffic <= 16:
+            ai_staff = 3  # ~5:1 ratio
         else:
-            # High intensity - prevent survival mode, aim for 4:1
-            ai_staff = max(8, int(traffic / 4))  # Aim for 4:1 ratio
+            # Peak periods - aim for 4-5:1
+            ai_staff = min(4, max(3, int(traffic / 5)))  # Cap at 4 staff
 
-        # Baseline staffing (legacy - understaffed at ~8-10:1 ratio)
-        # Always understaffed to show impact
-        if traffic <= 15:
-            baseline_staff = 1  # Severely understaffed
-        elif traffic <= 30:
-            baseline_staff = max(2, int(traffic / 10))  # ~10:1 ratio
+        # Baseline staffing (legacy - understaffed)
+        # Runs at 8-12:1 ratio (always fewer than AI)
+        if traffic <= 10:
+            baseline_staff = 1  # Understaffed
+        elif traffic <= 20:
+            baseline_staff = 2  # Still understaffed
         else:
-            # High intensity but understaffed
-            baseline_staff = max(3, int(traffic / 10))  # ~10:1 ratio
+            baseline_staff = 2  # Significantly understaffed at peak
 
         data.append({
             'Hour': hour,
@@ -358,15 +360,15 @@ def generate_store_daily_data(store_name, date):
     # Days of the week
     days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
 
-    # Store-specific parameters - Realistic Pandora daily traffic
+    # Store-specific parameters - Scaled daily traffic for small luxury store
     # Based on 12-hour operating day (9 AM - 9 PM)
     store_params = {
-        "London": {"base": 280, "weekend_boost": 120, "peak_days": [4, 5, 6]},  # Fri, Sat, Sun
-        "Copenhagen": {"base": 220, "weekend_boost": 90, "peak_days": [3, 5, 6]},  # Thu, Sat, Sun
-        "Paris": {"base": 250, "weekend_boost": 105, "peak_days": [4, 5, 6]}   # Fri, Sat, Sun
+        "London": {"base": 140, "weekend_boost": 50, "peak_days": [4, 5, 6]},  # Fri, Sat, Sun (~110-190/day)
+        "Copenhagen": {"base": 100, "weekend_boost": 40, "peak_days": [3, 5, 6]},  # Thu, Sat, Sun (~80-140/day)
+        "Paris": {"base": 120, "weekend_boost": 45, "peak_days": [4, 5, 6]}   # Fri, Sat, Sun (~95-165/day)
     }
 
-    params = store_params.get(store_name, {"base": 250, "weekend_boost": 100, "peak_days": [5, 6]})
+    params = store_params.get(store_name, {"base": 120, "weekend_boost": 45, "peak_days": [5, 6]})
 
     # Determine which days should show actual traffic based on selected date
     today = datetime.now().date()
@@ -385,11 +387,14 @@ def generate_store_daily_data(store_name, date):
     data = []
     for i, day in enumerate(days):
         # Base traffic with random variation
-        traffic = params["base"] + np.random.randint(-20, 30)
+        traffic = params["base"] + np.random.randint(-10, 15)
 
         # Weekend/peak day boost
         if i in params["peak_days"]:
             traffic += params["weekend_boost"]
+
+        # Ensure realistic minimum
+        traffic = max(60, traffic)  # At least 60 visitors per day
 
         # Generate actual traffic (with slight variance from predicted)
         actual_traffic = None
@@ -410,9 +415,9 @@ def generate_store_daily_data(store_name, date):
         # Calculate average hourly traffic for staffing estimation
         avg_hourly = traffic / 12  # 12-hour operating day
 
-        # AI-recommended staffing (total staff-hours per day, aiming for ~4-5:1 ratio)
-        # Staff needed = traffic / optimal_ratio
-        ai_staff = max(int(traffic / 4.5), 24)  # Minimum 24 staff-hours per day (2 per hour)
+        # AI-recommended staffing (total staff-hours per day, aiming for ~5:1 ratio)
+        # More realistic for small luxury store
+        ai_staff = max(int(traffic / 5), 18)  # Minimum 18 staff-hours per day (~1.5 per hour)
 
         # Baseline staffing (understaffed at ~10:1 ratio)
         # Always significantly understaffed to demonstrate impact
