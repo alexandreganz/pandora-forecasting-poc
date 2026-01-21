@@ -85,7 +85,11 @@ A Proof of Concept (PoC) Streamlit application designed for Pandora executives t
 **Main Dashboard (3 cards):**
 - **Total Predicted Traffic**: Customer visit forecasts
 - **Revenue Recovery**: Potential sales revenue with tooltip explanation
-- **Staffing Efficiency**: Optimal allocation percentage with tooltip
+- **Conversion Efficiency**: AI-optimized conversion rate (20%) vs baseline (14%)
+  - Shows percentage improvement (+42.9%)
+  - Dynamic conversion lift model based on STA (Shopper-to-Associate) ratios
+  - Tooltip explaining optimal 4-5:1 STA ratio vs understaffed 10:1 ratio
+  - Demonstrates revenue gains from better service through proper staffing
 
 **Performance Metrics (Right Column - 3 compact cards):**
 - **🎯 AI Adoption Rate**: % of days following AI recommendations (Today / 3 Days / Week)
@@ -158,9 +162,12 @@ python -m streamlit run app.py
 
 ```
 pandora-forecasting-poc/
-├── app.py                 # Main application file (~1500 lines)
-├── requirements.txt       # Python dependencies
-└── claude.md             # This documentation file
+├── app.py                                # Main application file (~1500 lines)
+├── requirements.txt                      # Python dependencies
+├── claude.md                            # This documentation file
+├── PRESENTATION.md                      # Executive presentation deck
+├── PRODUCT_ROADMAP_2026.csv            # Detailed 133-task roadmap
+└── PRODUCT_ROADMAP_2026_EXECUTIVE.csv  # Executive summary (33 phases)
 ```
 
 ## Data Models & Calculations
@@ -184,15 +191,44 @@ Avg_FTE = mean(FTE_per_period)
 AI_Staffing = Predicted_Traffic × 0.93
 ```
 
-### Revenue Impact Calculation
+### Revenue Impact Calculation with Dynamic Conversion Lift
 ```python
-# Revenue from optimal staffing (5% conversion improvement)
-Revenue_Impact (kr) = Total_Traffic × 0.05 × 0.20 × 931.25
+# Dynamic revenue calculation based on STA (Shopper-to-Associate) ratios
+def calculate_dynamic_revenue(traffic, staff_ftes):
+    sta_ratio = traffic / max(staff_ftes, 1)  # Avoid division by zero
+
+    # Conversion rate based on STA ratio (optimal: 4-5:1)
+    if sta_ratio <= 5:
+        conversion_rate = 0.20  # Optimal service
+    elif sta_ratio <= 7:
+        conversion_rate = 0.18  # Good service
+    elif sta_ratio <= 10:
+        conversion_rate = 0.15  # Adequate service
+    else:
+        conversion_rate = 0.14  # Understaffed
+
+    # Revenue calculation
+    revenue = traffic * conversion_rate * 931.25
+    return revenue, conversion_rate
+
+# Baseline (Legacy) System:
+# - Understaffed at ~10:1 STA ratio
+# - Results in 14% conversion rate
+baseline_revenue, baseline_cr = calculate_dynamic_revenue(traffic, baseline_staff)
+
+# AI-Optimized System:
+# - Optimal staffing at 4-5:1 STA ratio
+# - Results in 20% conversion rate
+ai_revenue, ai_cr = calculate_dynamic_revenue(traffic, ai_staff)
+
+# Conversion improvement
+conversion_improvement = ((ai_cr - baseline_cr) / baseline_cr) * 100
+# Result: +42.9% improvement (from 14% to 20%)
 
 Where:
-- 5% = Conversion improvement from optimal staffing
-- 20% = Baseline conversion rate
+- STA Ratio = Shoppers per Associate (lower = better service)
 - 931.25 kr = Average ticket ($125 × 7.45 DKK/USD)
+- Revenue Impact = Traffic × Conversion_Rate × Avg_Ticket
 ```
 
 ### AI Adoption Rate
@@ -383,6 +419,98 @@ st.session_state.view_mode = 'hourly'  # or 'daily'
 - **Revenue Impact**: Quantified benefits of AI adoption
 - **Actionable Alerts**: "Needs Support" flag for stores <80% adoption
 
+## Product Roadmap (2026)
+
+### Overview
+The project includes a comprehensive product roadmap for taking this PoC to full production in 2026. Two versions are available for different audiences:
+
+### PRODUCT_ROADMAP_2026.csv (Detailed)
+- **133 tasks** across 8 core pillars
+- **52 weeks** (4 quarters, 26 two-week sprints)
+- **Full project details** including:
+  - Task dependencies and sequences
+  - Owner roles (Data Engineer, ML Engineer, Backend/Frontend Engineer, etc.)
+  - Priority levels (Critical, High, Medium, Low)
+  - Sprint assignments (1-26)
+  - Specific deliverables for each task
+  - Status tracking (all start as "Not Started")
+- **Use case**: Import into project management tools (Jira, Monday.com, Asana, Microsoft Project)
+
+### PRODUCT_ROADMAP_2026_EXECUTIVE.csv (Executive Summary)
+- **33 grouped phases** for high-level planning
+- **Business-friendly format** for stakeholder presentations
+- **Strategic progression** showing quarterly milestones
+- **Key deliverables** per phase (what executives will see)
+- **Use case**: Quarterly business reviews, board presentations, Gantt chart visualization
+
+### 8 Core Product Pillars
+
+1. **Data & Integration** (16 tasks)
+   - POS, foot traffic sensors, HRIS, weather/events integration
+   - Real-time data pipelines, ETL automation
+   - Data quality framework and governance
+
+2. **Forecasting & Intelligence** (13 tasks)
+   - XGBoost + LSTM ensemble models
+   - 90%+ forecast accuracy target
+   - Store-specific model calibration
+
+3. **Staffing & Scheduling** (14 tasks)
+   - Auto-scheduling algorithm with labor law compliance
+   - Drag-and-drop schedule editor
+   - Shift marketplace and mobile access
+
+4. **UI/UX & Visualization** (12 tasks)
+   - Design system and component library
+   - Manager and Executive dashboards
+   - WCAG 2.1 AA accessibility
+
+5. **Communication & Alerts** (8 tasks)
+   - Email, SMS, push notifications
+   - Configurable alert rules
+   - Automated report generation
+
+6. **Analytics & ROI** (12 tasks)
+   - A/B testing framework (AI vs Legacy)
+   - ROI calculator and store benchmarking
+   - Custom report builder
+
+7. **Adoption & Training** (8 tasks)
+   - Training videos and documentation
+   - In-app tutorials and onboarding wizard
+   - Adoption tracking and gamification
+
+8. **Infrastructure & Security** (12 tasks)
+   - Cloud infrastructure (AWS/Azure)
+   - JWT auth, API development, CI/CD
+   - Security hardening, disaster recovery
+
+### Major Milestones
+
+- **M1: Data Connected** (Week 13, Q1) - Foundation complete, 90% forecast accuracy
+- **M2: Alpha Release** (Week 26, Q2) - Dashboard live, 5 pilot stores onboarded
+- **M3: Beta Release** (Week 39, Q3) - ROI proven, 80% adoption, 20 beta stores
+- **M4: GA Launch** (Week 52, Q4) - 100+ stores ready, full production launch
+
+### Resource Requirements
+
+**Team Composition:**
+- Data Engineers (2-3)
+- ML Engineers (2-3)
+- Backend Engineers (3-4)
+- Frontend Engineers (2-3)
+- DevOps Engineers (1-2)
+- UX Designer (1-2)
+- Product Manager (1)
+- QA Engineer (1)
+- Training Specialist (1)
+
+**Parallel Execution Strategy:**
+- Q1: 8 people (Foundation)
+- Q2: 14 people (Peak - Core product development)
+- Q3: 12 people (Beta and refinement)
+- Q4: 11 people (Production readiness)
+
 ## Future Enhancement Opportunities
 
 1. **Real Data Integration**: Connect to actual POS and foot traffic systems
@@ -439,6 +567,21 @@ pip install -r requirements.txt --upgrade
 - App structure: ~1500 lines in single file (app.py)
 
 ## Version History
+
+- **v3.1** (2026-01-21): Conversion Efficiency KPI and Product Roadmap
+  - **Conversion Efficiency KPI**: Replaced Staffing Efficiency card with Conversion Efficiency
+    - Shows AI-optimized (20%) vs baseline (14%) conversion rates
+    - +42.9% improvement highlighting revenue gains from better service
+    - Dynamic tooltip explaining STA (Shopper-to-Associate) ratios
+  - **Dynamic Conversion Lift Model**: Conversion rates based on STA ratios
+    - Optimal: 4-5:1 STA → 20% conversion rate
+    - Understaffed: 10:1 STA → 14% conversion rate
+  - **Updated calculate_kpis()**: Now returns 8 values including baseline_cr and ai_cr
+  - **2026 Product Roadmap Deliverables**:
+    - PRODUCT_ROADMAP_2026.csv: Detailed 133-task roadmap (52 weeks, 26 sprints)
+    - PRODUCT_ROADMAP_2026_EXECUTIVE.csv: Executive summary (33 grouped phases, 8 pillars)
+    - PRESENTATION.md: Stakeholder presentation deck
+  - **8 Core Product Pillars**: Data & Integration, Forecasting & Intelligence, Staffing & Scheduling, UI/UX, Communication & Alerts, Analytics & ROI, Adoption & Training, Infrastructure & Security
 
 - **v3.0** (2026-01-19): Performance optimization and UX improvements
   - **Forecast Confidence Intervals**: Added ±10% band around predictions
